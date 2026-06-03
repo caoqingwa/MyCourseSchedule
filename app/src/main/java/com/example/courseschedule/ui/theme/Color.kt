@@ -1,11 +1,11 @@
-package com.example.courseschedule.ui.theme
+﻿package com.example.courseschedule.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
 val Primary = Color(0xFF4A6741)
 val OnPrimary = Color(0xFFFFFFFF)
 val PrimaryContainer = Color(0xFFCBE8BE)
-val OnPr
+val OnPrimaryContainer = Color(0xFF082100)
 val Surface = Color(0xFFF8FAF0)
 val OnSurface = Color(0xFF1A1C18)
 val OnSurfaceVariant = Color(0xFF43483E)

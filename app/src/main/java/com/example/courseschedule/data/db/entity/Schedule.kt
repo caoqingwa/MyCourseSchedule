@@ -1,4 +1,4 @@
-package com.example.courseschedule.data.db.entity
+﻿package com.example.courseschedule.data.db.entity
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
