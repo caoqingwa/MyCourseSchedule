@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>课程表 App - 界面预览 v2</title>
+<style>
+:root{--p:#4A6741;--onp:#FFF;--pc:#CBE8BE;--opc:#082100;--s:#F8FAF0;--sv:#DFE4D7;--os:#1A1C18;--osv:#43483E;--ol:#73796D;--sc:#ECF0E3;--scl:#F2F6E9;--e:#BA1A1A;--ec:#FFDAD6}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Segoe UI,Microsoft YaHei,sans-serif;background:#1a1a2e;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:30px 10px;gap:24px;flex-wrap:wrap}
+.pf{width:375px;height:812px;background:var(--s);border-radius:40px;overflow:hidden;box-shadow:0 25px 60px rgba(0,0,0,.5);position:relative;border:3px solid #333;flex-shrink:0;display:flex;flex-direction:column}
+.sb{height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:13px;font-weight:600;color:var(--os);flex-shrink:0}
+.tb{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0}
+.tb h1{font-size:20px;font-weight:600;color:var(--os)}
+.wb{background:var(--pc);color:var(--opc);padding:3px 10px;border-radius:14px;font-size:12px;font-weight:500}
+.ib{width:36px;height:36px;border-radius:50%;border:none;background:0 0;cursor:pointer;font-size:18px;color:var(--osv)}
+.db{display:flex;align-items:center;justify-content:space-between;padding:4px 16px 10px;flex-shrink:0}
+.db .dt{font-size:13px;color:var(--osv)}
+.dyb{background:var(--p);color:var(--onp);padding:3px 10px;border-radius:10px;font-size:12px;font-weight:500}
+.sc{flex:1;overflow-y:auto;padding:0 16px 16px}
+.sc::-webkit-scrollbar{width:0}
+.bnav{flex-shrink:0;padding:8px 16px 12px;background:var(--s)}
+.bnav-inner{display:flex;gap:0;background:var(--sc);border-radius:20px;padding:4px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.bnav-btn{flex:1;padding:10px 0;border:none;border-radius:16px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px}
+.bnav-btn.active{background:var(--p);color:var(--onp);box-shadow:0 2px 8px rgba(74,103,65,.3)}
+.bnav-btn:not(.active){background:transparent;color:var(--osv)}
+.bnav-btn:not(.active):hover{background:var(--scl)}
+.upcoming-header{font-size:13px;font-weight:600;color:var(--osv);margin-bottom:12px;padding-left:2px}
+.upcoming-count{color:var(--p);font-weight:700}
+.course-card{border-radius:16px;padding:16px;margin-bottom:10px;cursor:pointer;transition:transform .15s;position:relative;overflow:hidden}
+.course-card:active{transform:scale(.98)}
+.course-card .cc-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.course-card .cc-name{font-size:17px;font-weight:700}
+.course-card .cc-time-badge{background:rgba(255,255,255,.6);padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600;white-space:nowrap}
+.course-card .cc-info{display:flex;flex-direction:column;gap:4px}
+.course-card .cc-row{display:flex;align-items:center;gap:6px;font-size:13px;opacity:.85}
+.course-card .cc-row .icon{font-size:14px;width:18px;text-align:center}
+.course-card .cc-next{margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.3);font-size:12px;font-weight:500;opacity:.8}
+.cc-green{background:linear-gradient(135deg,#CBE8BE 0%,#A8D5A0 100%);color:#1a3a10}
+.cc-blue{background:linear-gradient(135deg,#BDD8F8 0%,#9EC4EE 100%);color:#0a2a5c}
+.cc-purple{background:linear-gradient(135deg,#E0D0F0 0%,#C8B8E8 100%);color:#2a1050}
+.cc-orange{background:linear-gradient(135deg,#FFE0C0 0%,#FFD0A0 100%);color:#5a2800}
+.cc-pink{background:linear-gradient(135deg,#F8D0E0 0%,#F0B8D0 100%);color:#5a1030}
+.cc-teal{background:linear-gradient(135deg,#C0F0E8 0%,#A0E8DC 100%);color:#0a3a30}
+.cc-current{border:2px solid var(--p);box-shadow:0 4px 16px rgba(74,103,65,.3)}
+.cc-current::before{content:"当前";position:absolute;top:8px;right:8px;background:var(--p);color:var(--onp);padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700}
+.no-class{text-align:center;padding:40px 20px;color:var(--osv)}
+.no-class .emoji{font-size:48px;margin-bottom:12px}
+.no-class .msg{font-size:15px;font-weight:500}
+.no-class .sub{font-size:13px;color:var(--ol);margin-top:6px}
+.wg{display:grid;grid-template-columns:36px repeat(5,1fr);gap:2px;min-width:340px}
+.wh{font-size:11px;font-weight:600;text-align:center;padding:6px 2px;color:var(--osv);background:var(--sc);border-radius:6px}
+.wh.th{background:var(--p);color:var(--onp)}
+.wpl{font-size:10px;font-weight:500;text-align:center;padding:4px 0;color:var(--osv);display:flex;align-items:center;justify-content:center}
+.wc{min-height:40px;border-radius:5px;padding:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;font-size:9px;text-align:center;line-height:1.2;font-weight:500}
+.wc.em{background:var(--scl)}
+.wc .wn{font-size:9px;font-weight:600}.wc .wr{font-size:8px;opacity:.7}
+.rs{margin-bottom:16px}
+.rst{font-size:12px;font-weight:600;color:var(--osv);padding:0 4px 6px;text-transform:uppercase;letter-spacing:.5px}
+.rca{background:var(--scl);border-radius:14px;padding:14px;margin-bottom:6px}
+.rca .rh{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.rca .rt{font-size:14px;font-weight:600;color:var(--os)}.rca .rs2{font-size:12px;color:var(--osv);margin-bottom:4px}
+.rca .rd{font-size:12px;color:var(--osv)}
+.bdg{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap}
+.bdg.w{background:#FFE082;color:#5a3000}.bdg.ok{background:var(--pc);color:var(--opc)}.bdg.u{background:var(--ec);color:var(--e)}
+.pbr{height:3px;background:var(--sv);border-radius:2px;overflow:hidden;margin-top:8px}
+.pbr .fl{height:100%;border-radius:2px}
+.ov{position:absolute;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:100;padding:24px}
+.ov.sh{display:flex}
+.dlg{background:var(--s);border-radius:24px;width:100%;max-width:320px;padding:20px}
+.dlg h2{font-size:18px;font-weight:600;margin-bottom:12px;color:var(--os)}
+.drow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--sv)}
+.drow:last-child{border-bottom:none}
+.drow .di{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.drow .dl{font-size:11px;color:var(--osv)}.drow .dv{font-size:13px;font-weight:500;color:var(--os)}
+.dact{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.dact button{padding:8px 16px;border-radius:18px;border:none;font-size:13px;font-weight:600;cursor:pointer}
+.bt{background:0 0;color:var(--p)}.bf{background:var(--p);color:var(--onp)}
+.cdlg{background:var(--s);border-radius:24px;width:100%;max-width:330px;padding:16px}
+.cdh{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.cdh h3{font-size:16px;font-weight:600;color:var(--os)}
+.cgr{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;text-align:center}
+.cdw{font-size:10px;font-weight:600;color:var(--osv);padding:4px 0}
+.cda{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:12px;cursor:pointer;margin:0 auto;color:var(--os)}
+.cda.td{background:var(--p);color:var(--onp);font-weight:700}
+.cda.iw{background:var(--pc);color:var(--opc)}
+.cwi{text-align:center;margin-top:10px;padding:8px;background:var(--scl);border-radius:10px;font-size:12px;color:var(--osv)}
+.cwi strong{color:var(--p)}
+.pl{text-align:center;color:#8899aa;font-size:13px;margin-top:10px;font-weight:500}
+</style></head><body>
+<div style="text-align:center">
+<div class="pf">
+<div class="sb"><span>9:41</span><span>📶 🔋</span></div>
+<div class="tb"><button class="ib" onclick="document.getElementById('cald').classList.add('sh')">📅</button>
+<div style="display:flex;align-items:center;gap:8px"><h1>课程表</h1><span class="wb">第8周</span></div>
+<button class="ib">🔔</button></div>
+<div class="db"><span class="dt">2026年6月3日 · 周三</span><span class="dyb">今天</span></div>
+<div class="sc">
+<div class="upcoming-header">今日剩余 <span class="upcoming-count">2</span> 节课</div>
+<div class="course-card cc-blue cc-current" onclick="document.getElementById('dd').classList.add('sh')">
+<div class="cc-top"><span class="cc-name">大学物理</span><span class="cc-time-badge">14:00-15:40</span></div>
+<div class="cc-info">
+<div class="cc-row"><span class="icon">📍</span>教2-205</div>
+<div class="cc-row"><span class="icon">🕐</span>第5-6节</div>
+<div class="cc-row"><span class="icon">👨‍🏫</span>李老师</div>
+</div>
+<div class="cc-next">⏭ 下一节：英语读写 15:55 · 外语楼-302</div>
+</div>
+<div class="course-card cc-purple" onclick="document.getElementById('dd2').classList.add('sh')">
+<div class="cc-top"><span class="cc-name">英语读写</span><span class="cc-time-badge">15:55-17:35</span></div>
+<div class="cc-info">
+<div class="cc-row"><span class="icon">📍</span>外语楼-302</div>
+<div class="cc-row"><span class="icon">🕐</span>第7-8节</div>
+<div class="cc-row"><span class="icon">👨‍🏫</span>王老师</div>
+</div>
+</div>
+</div>
+<div class="bnav"><div class="bnav-inner">
+<button class="bnav-btn active">📅 今日</button>
+<button class="bnav-btn">📆 周课表</button>
+<button class="bnav-btn">🗓 日历</button>
+</div></div>
+</div>
+<div class="ov" id="dd" onclick="this.classList.remove('sh')">
+<div class="dlg" onclick="event.stopPropagation()">
+<h2>大学物理</h2>
+<div class="drow"><div class="di cc-blue">📍</div><div><div class="dl">教室</div><div class="dv">教2-205</div></div></div>
+<div class="drow"><div class="di cc-purple">👨‍🏫</div><div><div class="dl">教师</div><div class="dv">李老师</div></div></div>
+<div class="drow"><div class="di cc-green">📅</div><div><div class="dl">课程周数</div><div class="dv">第1-16周 全周</div></div></div>
+<div class="drow"><div class="di cc-orange">🕐</div><div><div class="dl">时间安排</div><div class="dv">周二 5-6节, 周三 5-6节</div></div></div>
+<div class="dact"><button class="bt" onclick="document.getElementById('dd').classList.remove('sh')">关闭</button><button class="bf">编辑</button></div>
+</div></div>
+<div class="ov" id="dd2" onclick="this.classList.remove('sh')">
+<div class="dlg" onclick="event.stopPropagation()">
+<h2>英语读写</h2>
+<div class="drow"><div class="di cc-purple">📍</div><div><div class="dl">教室</div><div class="dv">外语楼-302</div></div></div>
+<div class="drow"><div class="di cc-green">👨‍🏫</div><div><div class="dl">教师</div><div class="dv">王老师</div></div></div>
+<div class="drow"><div class="di cc-blue">📅</div><div><div class="dl">课程周数</div><div class="dv">第1-16周 双周</div></div></div>
+<div class="drow"><div class="di cc-orange">🕐</div><div><div class="dl">时间安排</div><div class="dv">周三 7-8节</div></div></div>
+<div class="dact"><button class="bt" onclick="document.getElementById('dd2').classList.remove('sh')">关闭</button><button class="bf">编辑</button></div>
+</div></div>
+<div class="ov" id="cald" onclick="this.classList.remove('sh')">
+<div class="cdlg" onclick="event.stopPropagation()">
+<div class="cdh"><button class="ib" style="font-size:16px">◀</button><h3>2026年6月</h3><button class="ib" style="font-size:16px">▶</button></div>
+<div class="cgr">
+<div class="cdw">一</div><div class="cdw">二</div><div class="cdw">三</div><div class="cdw">四</div><div class="cdw">五</div><div class="cdw">六</div><div class="cdw">日</div>
+<div class="cda iw">1</div><div class="cda iw">2</div><div class="cda iw td">3</div><div class="cda iw">4</div><div class="cda iw">5</div><div class="cda">6</div><div class="cda">7</div>
+<div class="cda">8</div><div class="cda">9</div><div class="cda">10</div><div class="cda">11</div><div class="cda">12</div><div class="cda">13</div><div class="cda">14</div>
+<div class="cda">15</div><div class="cda">16</div><div class="cda">17</div><div class="cda">18</div><div class="cda">19</div><div class="cda">20</div><div class="cda">21</div>
+<div class="cda">22</div><div class="cda">23</div><div class="cda">24</div><div class="cda">25</div><div class="cda">26</div><div class="cda">27</div><div class="cda">28</div>
+<div class="cda">29</div><div class="cda">30</div>
+<div class="cda" style="visibility:hidden"></div><div class="cda" style="visibility:hidden"></div><div class="cda" style="visibility:hidden"></div><div class="cda" style="visibility:hidden"></div><div class="cda" style="visibility:hidden"></div>
+</div>
+<div class="cwi">当前：<strong>第8周</strong> · 2026.06.01 ~ 06.07</div>
+</div></div>
+<div class="pl">📄 今日课程页（只显示未上的课，当前课高亮）</div>
+</div>
+<div style="text-align:center">
+<div class="pf">
+<div class="sb"><span>9:41</span><span>📶 🔋</span></div>
+<div class="tb"><button class="ib">📅</button>
+<div style="display:flex;align-items:center;gap:8px"><h1>课程表</h1><span class="wb">第8周</span></div>
+<button class="ib">🔔</button></div>
+<div class="db"><span class="dt">第8周 · 2026.06.01 ~ 06.07</span></div>
+<div class="sc" style="padding-top:2px"><div style="overflow-x:auto;padding:0 4px 16px">
+<div class="wg">
+<div class="wh"></div>
+<div class="wh">周一</div><div class="wh">周二</div><div class="wh th">周三</div><div class="wh">周四</div><div class="wh">周五</div>
+<div class="wpl">1<br><span style="font-size:8px;opacity:.5">08:00</span></div>
+<div class="wc em"></div>
+<div class="wc cc-green"><span class="wn">高等数学</span><span class="wr">教3-301</span></div>
+<div class="wc em"></div>
+<div class="wc cc-pink"><span class="wn">线性代数</span><span class="wr">教1-102</span></div>
+<div class="wc em"></div>
+<div class="wpl">2<br><span style="font-size:8px;opacity:.5">08:50</span></div>
+<div class="wc em"></div>
+<div class="wc cc-green"><span class="wn">高等数学</span><span class="wr">教3-301</span></div>
+<div class="wc em"></div>
+<div class="wc cc-pink"><span class="wn">线性代数</span><span class="wr">教1-102</span></div>
+<div class="wc em"></div>
+<div class="wpl">3<br><span style="font-size:8px;opacity:.5">09:55</span></div>
+<div class="wc cc-orange"><span class="wn">程序设计</span><span class="wr">机房-201</span></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc cc-teal"><span class="wn">数据结构</span><span class="wr">教4-405</span></div>
+<div class="wpl">4<br><span style="font-size:8px;opacity:.5">10:45</span></div>
+<div class="wc cc-orange"><span class="wn">程序设计</span><span class="wr">机房-201</span></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc cc-teal"><span class="wn">数据结构</span><span class="wr">教4-405</span></div>
+<div class="wpl">5<br><span style="font-size:8px;opacity:.5">14:00</span></div>
+<div class="wc em"></div>
+<div class="wc cc-blue"><span class="wn">大学物理</span><span class="wr">教2-205</span></div>
+<div class="wc cc-blue"><span class="wn">大学物理</span><span class="wr">教2-205</span></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wpl">6<br><span style="font-size:8px;opacity:.5">14:50</span></div>
+<div class="wc em"></div>
+<div class="wc cc-blue"><span class="wn">大学物理</span><span class="wr">教2-205</span></div>
+<div class="wc cc-blue"><span class="wn">大学物理</span><span class="wr">教2-205</span></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wpl">7<br><span style="font-size:8px;opacity:.5">15:55</span></div>
+<div class="wc cc-purple"><span class="wn">英语读写</span><span class="wr">外语楼-302</span></div>
+<div class="wc em"></div>
+<div class="wc cc-purple"><span class="wn">英语读写</span><span class="wr">外语楼-302</span></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wpl">8<br><span style="font-size:8px;opacity:.5">16:45</span></div>
+<div class="wc cc-purple"><span class="wn">英语读写</span><span class="wr">外语楼-302</span></div>
+<div class="wc em"></div>
+<div class="wc cc-purple"><span class="wn">英语读写</span><span class="wr">外语楼-302</span></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wpl">9<br><span style="font-size:8px;opacity:.5">19:00</span></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wpl">10<br><span style="font-size:8px;opacity:.5">19:50</span></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wpl">11<br><span style="font-size:8px;opacity:.5">20:40</span></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wpl">12<br><span style="font-size:8px;opacity:.5">21:30</span></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+<div class="wc em"></div>
+</div></div></div>
+<div class="bnav"><div class="bnav-inner">
+<button class="bnav-btn">📅 今日</button>
+<button class="bnav-btn active">📆 周课表</button>
+<button class="bnav-btn">🗓 日历</button>
+</div></div>
+</div></div>
+<div class="pl">📆 周课表（5列×12行网格，颜色区分课程）</div>
+</div>
+<div style="text-align:center">
+<div class="pf">
+<div class="sb"><span>9:41</span><span>📶 🔋</span></div>
+<div class="tb"><button class="ib">📅</button>
+<div style="display:flex;align-items:center;gap:8px"><h1>课程表</h1><span class="wb">第8周</span></div>
+<button class="ib">🔔</button></div>
+<div class="db"><span class="dt">2026年6月</span></div>
+<div class="sc">
+<div style="background:var(--sc);border-radius:16px;padding:12px;margin-bottom:12px">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+<button class="ib" style="font-size:16px">◀</button>
+<span style="font-size:16px;font-weight:600;color:var(--os)">2026年6月</span>
+<button class="ib" style="font-size:16px">▶</button>
+</div>
+<div class="cgr">
+<div class="cdw">一</div><div class="cdw">二</div><div class="cdw">三</div><div class="cdw">四</div><div class="cdw">五</div><div class="cdw">六</div><div class="cdw">日</div>
+<div class="cda iw">1</div><div class="cda iw">2</div><div class="cda iw td">3</div><div class="cda iw">4</div><div class="cda iw">5</div><div class="cda">6</div><div class="cda">7</div>
+<div class="cda">8</div><div class="cda">9</div><div class="cda">10</div><div class="cda">11</div><div class="cda">12</div><div class="cda">13</div><div class="cda">14</div>
+<div class="cda">15</div><div class="cda">16</div><div class="cda">17</div><div class="cda">18</div><div class="cda">19</div><div class="cda">20</div><div class="cda">21</div>
+<div class="cda">22</div><div class="cda">23</div><div class="cda">24</div><div class="cda">25</div><div class="cda">26</div><div class="cda">27</div><div class="cda">28</div>
+<div class="cda">29</div><div class="cda">30</div>
+<div class="cda" style="visibility:hidden"></div><div class="cda" style="visibility:hidden"></div><div class="cda" style="visibility:hidden"></div><div class="cda" style="visibility:hidden"></div><div class="cda" style="visibility:hidden"></div>
+</div>
+<div class="cwi">当前：<strong>第8周</strong> · 2026.06.01 ~ 06.07</div>
+</div>
+<div class="rst" style="margin-top:4px">📅 本周课程</div>
+<div style="display:flex;gap:6px;margin-bottom:8px;overflow-x:auto;padding-bottom:4px">
+<div style="min-width:64px;background:var(--scl);border-radius:12px;padding:10px 8px;text-align:center;flex-shrink:0">
+<div style="font-size:12px;font-weight:600;color:var(--osv);margin-bottom:4px">周一</div>
+<div style="font-size:22px;font-weight:700;color:var(--os)">2</div>
+<div style="font-size:10px;color:var(--ol)">节课</div>
+</div>
+<div style="min-width:64px;background:var(--scl);border-radius:12px;padding:10px 8px;text-align:center;flex-shrink:0">
+<div style="font-size:12px;font-weight:600;color:var(--osv);margin-bottom:4px">周二</div>
+<div style="font-size:22px;font-weight:700;color:var(--os)">2</div>
+<div style="font-size:10px;color:var(--ol)">节课</div>
+</div>
+<div style="min-width:64px;background:var(--scl);border-radius:12px;padding:10px 8px;text-align:center;flex-shrink:0">
+<div style="font-size:12px;font-weight:600;color:var(--osv);margin-bottom:4px">周三</div>
+<div style="font-size:22px;font-weight:700;color:var(--os)">3</div>
+<div style="font-size:10px;color:var(--ol)">节课</div>
+</div>
+<div style="min-width:64px;background:var(--scl);border-radius:12px;padding:10px 8px;text-align:center;flex-shrink:0">
+<div style="font-size:12px;font-weight:600;color:var(--osv);margin-bottom:4px">周四</div>
+<div style="font-size:22px;font-weight:700;color:var(--os)">1</div>
+<div style="font-size:10px;color:var(--ol)">节课</div>
+</div>
+<div style="min-width:64px;background:var(--scl);border-radius:12px;padding:10px 8px;text-align:center;flex-shrink:0">
+<div style="font-size:12px;font-weight:600;color:var(--osv);margin-bottom:4px">周五</div>
+<div style="font-size:22px;font-weight:700;color:var(--os)">2</div>
+<div style="font-size:10px;color:var(--ol)">节课</div>
+</div>
+</div>
+<div class="rst">🎓 近期考试</div>
+<div class="rca"><div class="rh"><div><div class="rt">英语四级</div></div><span class="bdg u">5天后</span></div><div class="rd">6月8日 · 周一</div></div>
+<div class="rca"><div class="rh"><div><div class="rt">高数期中</div></div><span class="bdg w">12天后</span></div><div class="rd">6月15日 · 周一</div></div>
+<div class="rca"><div class="rh"><div><div class="rt">物理实验考</div></div><span class="bdg ok">28天后</span></div><div class="rd">7月1日 · 周三</div></div>
+</div>
+<div class="bnav"><div class="bnav-inner">
+<button class="bnav-btn">📅 今日</button>
+<button class="bnav-btn">📆 周课表</button>
+<button class="bnav-btn active">🗓 日历</button>
+</div></div>
+</div></div>
+<div class="pl">🗓 日历总览（月历 + 本周概览 + 近期考试）</div>
+</div>
+</body></html>
