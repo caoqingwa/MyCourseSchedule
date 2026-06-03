@@ -1,4 +1,4 @@
-package com.example.courseschedule.util
+﻿package com.example.courseschedule.util
 
 import android.app.PendingIntent
 import android.content.Context
@@ -15,7 +15,7 @@ object NotificationHelper {
         val notification = NotificationCompat.Builder(context, "course_reminder")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(courseName)
-            .setContentText("$period · $roomName 即将开始")
+            .setContentText(period + " \u00b7 " + roomName + " \u5373\u5c06\u5f00\u59cb")
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pending)
             .setAutoCancel(true)
@@ -29,8 +29,8 @@ object NotificationHelper {
     fun showExamReminder(context: Context, examName: String, daysLeft: Int) {
         val notification = NotificationCompat.Builder(context, "exam_reminder")
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("考试提醒")
-            .setContentText("$examName 还有 $daysLeft 天")
+            .setContentTitle("\u8003\u8bd5\u63d0\u9192")
+            .setContentText(examName + " \u8fd8\u6709 " + daysLeft + " \u5929")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()

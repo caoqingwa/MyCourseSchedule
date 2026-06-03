@@ -1,4 +1,4 @@
-package com.example.courseschedule.data.db.dao
+﻿package com.example.courseschedule.data.db.dao
 
 import androidx.room.*
 import com.example.courseschedule.data.db.entity.Semester
@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SemesterDao {
-  
+    @Query("SELECT * FROM semesters ORDER BY startDate DESC")
     fun getAll(): Flow<List<Semester>>
 
     @Query("SELECT * FROM semesters WHERE id = :id")

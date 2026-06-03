@@ -1,11 +1,11 @@
-package com.example.courseschedule.ui.screen.today
+﻿package com.example.courseschedule.ui.screen.today
 
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -15,6 +15,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.courseschedule.ui.component.CourseCard
 import com.example.courseschedule.util.DateUtils
+import com.example.courseschedule.worker.CourseReminderWorker
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -25,47 +26,102 @@ fun TodayScreen(
     viewModel: TodayViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val todayStr = SimpleDateFormat("yyyy年M月d日 · EEEE", Locale.CHINESE).format(Date())
+    val todayStr = SimpleDateFormat("yyyy\u5e74M\u6708d\u65e5 \u00b7 EEEE", Locale.CHINESE).format(Date())
+
+    LaunchedEffect(state.upcomingCourses) {
+        state.upcomingCourses.forEach { cws ->
+            val roomName = cws.roomName ?: ""
+            val periodStr = "\u7b2c" + cws.schedule.startPeriod + "-" + cws.schedule.endPeriod + "\u8282"
+            CourseReminderWorker.schedule(
+                context = viewModel.context,
+                courseName = cws.course.name,
+                roomName = roomName,
+                period = periodStr,
+                delayMinutes = 5
+            )
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("课程表", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                Text("\u8bfe\u7a0b\u8868", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.width(8.dp))
                 state.semester?.let { sem ->
                     val wk = DateUtils.getWeekNumber(System.currentTimeMillis(), sem.startDate)
                     Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.small) {
-                        Text("第" + wk + "周", modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text(
+                            "\u7b2c" + wk + "\u5468",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     }
                 }
             }
         })
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
             Text(todayStr, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Surface(color = MaterialTheme.colorScheme.primary, shape = MaterialTheme.shapes.small) {
-                Text("今天", modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp), fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimary)
+                Text(
+                    "\u4eca\u5929",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
             }
         }
 
         if (state.isEmpty) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("😊", fontSize = 48.sp)
+                    Text("\ud83d\udcda", fontSize = 48.sp)
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("今天没有课程，好好休息吧", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "\u4eca\u5929\u6ca1\u6709\u8bfe\u7a0b\uff0c\u597d\u597d\u4f11\u606f\u5427",
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "\u53bb\u6d3b\u52a8\u6d3b\u52a8\u5427 \ud83d\ude0a",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
                 }
             }
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
-                item { Text("今日剩余 " + state.totalRemaining + " 节课", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(vertical = 12.dp)
+            ) {
+                item {
+                    Text(
+                        "\u4eca\u65e5\u5269\u4f59 " + state.totalRemaining + " \u8282\u8bfe",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 state.currentCourse?.let { cws ->
                     item {
-                        val nxt = state.upcomingCourses.firstOrNull()?.let { "下一节：" + it.course.name + " " + it.schedule.startPeriod + "-" + it.schedule.endPeriod + "节" }
+                        val nxt = state.upcomingCourses.firstOrNull()?.let {
+                            "\u4e0b\u4e00\u8282\uff1a" + it.course.name + " " +
+                                    it.schedule.startPeriod + "-" + it.schedule.endPeriod + "\u8282"
+                        }
                         CourseCard(cws, isCurrent = true, nextInfo = nxt, onClick = { onCourseClick(cws.course.id) })
                     }
                 }
                 itemsIndexed(state.upcomingCourses) { idx, item ->
-                    val nxt = if (idx < state.upcomingCourses.lastIndex) state.upcomingCourses[idx+1].let { "下一节：" + it.course.name + " " + it.schedule.startPeriod + "-" + it.schedule.endPeriod + "节" } else null
+                    val nxt = if (idx < state.upcomingCourses.lastIndex) {
+                        val next = state.upcomingCourses[idx + 1]
+                        "\u4e0b\u4e00\u8282\uff1a" + next.course.name + " " +
+                                next.schedule.startPeriod + "-" + next.schedule.endPeriod + "\u8282"
+                    } else null
                     CourseCard(item, isCurrent = false, nextInfo = nxt, onClick = { onCourseClick(item.course.id) })
                 }
             }

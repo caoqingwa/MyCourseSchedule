@@ -1,4 +1,4 @@
-package com.example.courseschedule.worker
+﻿package com.example.courseschedule.worker
 
 import android.content.Context
 import androidx.hilt.work.HiltWorker
@@ -27,7 +27,7 @@ class CourseReminderWorker @AssistedInject constructor(
             val data = workDataOf("course_name" to courseName, "room_name" to roomName, "period" to period)
             val request = OneTimeWorkRequestBuilder<CourseReminderWorker>()
                 .setInputData(data)
-                .setDelay(delayMinutes, TimeUnit.MINUTES)
+                .setInitialDelay(delayMinutes, TimeUnit.MINUTES)
                 .build()
             WorkManager.getInstance(context).enqueue(request)
         }

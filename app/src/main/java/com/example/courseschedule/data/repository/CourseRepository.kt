@@ -27,6 +27,9 @@ class CourseRepository @Inject constructor(
     fun getSchedulesBySemester(semesterId: Long): Flow<List<Schedule>> = scheduleDao.getBySemester(semesterId)
     suspend fun insertSchedule(schedule: Schedule): Long = scheduleDao.insert(schedule)
 
+    suspend fun insertRoom(room: Room): Long = roomDao.insert(room)
+    suspend fun getRoomById(id: Long): Room? = roomDao.getById(id)
+
     fun getExamsBySemester(semesterId: Long): Flow<List<Exam>> = examDao.getBySemester(semesterId)
     suspend fun insertExam(exam: Exam): Long = examDao.insert(exam)
 }

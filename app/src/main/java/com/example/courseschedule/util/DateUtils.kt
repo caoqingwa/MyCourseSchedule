@@ -1,11 +1,11 @@
-package com.example.courseschedule.util
+﻿package com.example.courseschedule.util
 
 import java.util.*
 
 object DateUtils {
     private const val MILLIS_PER_DAY = 24 * 60 * 60 * 1000L
 
-    fun getWeekNumber(dateMillis: Long, semesterStartMillis: 
+    fun getWeekNumber(dateMillis: Long, semesterStartMillis: Long): Int {
         val daysDiff = (dateMillis - semesterStartMillis) / MILLIS_PER_DAY
         return (daysDiff / 7).toInt() + 1
     }

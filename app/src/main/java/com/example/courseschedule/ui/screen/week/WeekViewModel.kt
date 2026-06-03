@@ -1,13 +1,16 @@
-package com.example.courseschedule.ui.screen.week
+﻿package com.example.courseschedule.ui.screen.week
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.courseschedule.data.db.entity.Course
+import com.example.courseschedule.data.db.entity.Room
 import com.example.courseschedule.data.db.entity.Schedule
 import com.example.courseschedule.data.repository.CourseRepository
+import com.example.courseschedule.ui.theme.CourseColors
 import com.example.courseschedule.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import java.util.*
 import javax.inject.Inject
 
@@ -20,6 +23,7 @@ class WeekViewModel @Inject constructor(
         val currentWeek: Int = 1,
         val currentDayOfWeek: Int = 1,
         val weekRange: String = "",
+        val totalWeeks: Int = 20,
         val schedules: List<Schedule> = emptyList(),
         val courseMap: Map<Long, Course> = emptyMap()
     )
@@ -33,14 +37,64 @@ class WeekViewModel @Inject constructor(
         val range = DateUtils.getWeekRange(semester.startDate, week)
         val rangeStr = java.text.SimpleDateFormat("yyyy.MM.dd", Locale.getDefault()).format(Date(range.first)) + " ~ " + java.text.SimpleDateFormat("MM.dd", Locale.getDefault()).format(Date(range.second))
 
-        val schedules = repository.getSchedulesBySemester(semester.id).first()
+        val allSchedules = repository.getSchedulesBySemester(semester.id).first()
+        val activeSchedules = allSchedules.filter {
+            DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, week)
+        }
         val courses = mutableMapOf<Long, Course>()
-        schedules.forEach { s ->
+        activeSchedules.forEach { s ->
             if (!courses.containsKey(s.courseId)) {
                 repository.getCourseById(s.courseId)?.let { courses[s.courseId] = it }
             }
         }
 
-        WeekUiState(currentWeek = week, currentDayOfWeek = dow, weekRange = rangeStr, schedules = schedules, courseMap = courses)
+        WeekUiState(
+            currentWeek = week,
+            currentDayOfWeek = dow,
+            weekRange = rangeStr,
+            totalWeeks = semester.totalWeeks,
+            schedules = activeSchedules,
+            courseMap = courses
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WeekUiState())
+
+    fun addCourse(
+        dayOfWeek: Int,
+        name: String,
+        teacher: String,
+        room: String,
+        weekType: Int,
+        startWeek: Int,
+        endWeek: Int,
+        startPeriod: Int,
+        endPeriod: Int
+    ) {
+        viewModelScope.launch {
+            val semester = repository.getCurrentSemester().first() ?: return@launch
+            val colorIdx = (System.currentTimeMillis() % CourseColors.size).toInt()
+            val roomId = if (room.isNotBlank()) {
+                repository.insertRoom(Room(name = room))
+            } else null
+            val courseId = repository.insertCourse(
+                Course(
+                    semesterId = semester.id,
+                    name = name,
+                    teacher = teacher,
+                    color = colorIdx.toString(),
+                    roomId = roomId
+                )
+            )
+            repository.insertSchedule(
+                Schedule(
+                    courseId = courseId,
+                    dayOfWeek = dayOfWeek,
+                    startPeriod = startPeriod,
+                    endPeriod = endPeriod,
+                    startWeek = startWeek,
+                    endWeek = endWeek,
+                    weekType = weekType
+                )
+            )
+        }
+    }
 }
