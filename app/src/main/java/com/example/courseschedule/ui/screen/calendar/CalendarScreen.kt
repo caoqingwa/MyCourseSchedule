@@ -24,7 +24,7 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(
-    onDayClick: (Long) -> Unit,
+    onDayClick: (dayMillis: Long, weekNumber: Int) -> Unit,
     onNavigateToToday: () -> Unit,
     viewModel: CalendarViewModel = hiltViewModel()
 ) {
@@ -47,7 +47,11 @@ fun CalendarScreen(
                         todayMillis = state.todayMillis,
                         semesterStartMillis = sem.startDate,
                         currentWeek = state.currentWeek,
-                        onDayClick = { onDayClick(it) },
+                        totalWeeks = sem.totalWeeks,
+                        onDayClick = { dayMillis ->
+                            val weekNum = DateUtils.getWeekNumber(dayMillis, sem.startDate)
+                            onDayClick(dayMillis, weekNum)
+                        },
                         onMonthChange = { month, year -> displayMonth = month; displayYear = year },
                         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
                     )
@@ -66,7 +70,7 @@ fun CalendarScreen(
 
             item {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val days = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94")
+                    val days = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e94", "\u5468\u56db", "\u5468\u4e94")
                     state.weeklyCourseCount.forEachIndexed { i, count ->
                         Box(
                             modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp))

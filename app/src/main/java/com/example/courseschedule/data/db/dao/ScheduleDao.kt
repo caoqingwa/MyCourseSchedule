@@ -1,4 +1,4 @@
-package com.example.courseschedule.data.db.dao
+﻿package com.example.courseschedule.data.db.dao
 
 import androidx.room.*
 import com.example.courseschedule.data.db.entity.Schedule
@@ -10,7 +10,10 @@ interface ScheduleDao {
     fun getBySemester(semesterId: Long): Flow<List<Schedule>>
 
     @Query("SELECT * FROM schedules WHERE courseId = :courseId")
-    fun getByCourse(courseId: Long): Flow<List<Schedule>>
+    suspend fun getByCourse(courseId: Long): List<Schedule>
+
+    @Query("SELECT * FROM schedules WHERE courseId = :courseId")
+    fun getFlowByCourse(courseId: Long): Flow<List<Schedule>>
 
     @Insert
     suspend fun insert(schedule: Schedule): Long
@@ -20,4 +23,7 @@ interface ScheduleDao {
 
     @Delete
     suspend fun delete(schedule: Schedule)
+
+    @Query("DELETE FROM schedules WHERE courseId = :courseId")
+    suspend fun deleteByCourseId(courseId: Long)
 }

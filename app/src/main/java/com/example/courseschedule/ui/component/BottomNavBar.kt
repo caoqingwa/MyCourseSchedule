@@ -1,4 +1,4 @@
-package com.example.courseschedule.ui.component
+﻿package com.example.courseschedule.ui.component
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -38,7 +38,7 @@ fun BottomNavBar(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             screens.forEach { screen ->
-                val selected = currentRoute == screen.route
+                val selected = currentRoute?.startsWith(screen.baseRoute) == true
                 val bgColor by animateColorAsState(
                     if (selected) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.surfaceContainer, label = "bg"

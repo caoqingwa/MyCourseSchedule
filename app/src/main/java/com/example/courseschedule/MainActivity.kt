@@ -1,25 +1,25 @@
-package com.example.courseschedule
+﻿package com.example.courseschedule
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
 import com.example.courseschedule.ui.navigation.Screen
 import com.example.courseschedule.ui.navigation.bottomNavItems
+import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.ui.component.BottomNavBar
 import com.example.courseschedule.ui.screen.today.TodayScreen
 import com.example.courseschedule.ui.screen.week.WeekScreen
 import com.example.courseschedule.ui.screen.calendar.CalendarScreen
 import com.example.courseschedule.ui.theme.CourseScheduleTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -36,42 +36,54 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainApp() {
-    val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
+    val pagerState = rememberPagerState(pageCount = { 3 })
+    val coroutineScope = rememberCoroutineScope()
+
+    // Map pager index <-> Screen
+    val screens = bottomNavItems // [Today=0, Week=1, Calendar=2]
 
     Scaffold(
         bottomBar = {
             BottomNavBar(
-                currentRoute = currentRoute,
+                currentRoute = screens[pagerState.currentPage].route,
                 onNavigate = { screen ->
-                    navController.navigate(screen.route) {
-                        popUpTo(Screen.Today.route) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
+                    val targetIndex = screens.indexOf(screen)
+                    if (targetIndex >= 0) {
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(targetIndex)
+                        }
                     }
                 },
-                screens = bottomNavItems
+                screens = screens
             )
         }
     ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = Screen.Today.route,
-            modifier = Modifier.padding(padding)
-        ) {
-            composable(Screen.Today.route) {
-                TodayScreen(onCourseClick = { /* navigate to detail */ })
-            }
-            composable(Screen.Week.route) {
-                WeekScreen(onCourseClick = { /* navigate to detail */ })
-            }
-            composable(Screen.Calendar.route) {
-                CalendarScreen(
-                    onDayClick = { navController.navigate(Screen.Today.route) },
-                    onNavigateToToday = { navController.navigate(Screen.Today.route) }
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+            userScrollEnabled = true
+        ) { page ->
+            when (page) {
+                0 -> TodayScreen(onCourseClick = { })
+                1 -> WeekScreen(onCourseClick = { })
+                2 -> CalendarScreen(
+                    onDayClick = { _, weekNumber ->
+                        NavigationState.targetWeek = weekNumber
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(1)
+                        }
+                    },
+                    onNavigateToToday = {
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(0)
+                        }
+                    }
                 )
             }
         }
     }
 }
+
+

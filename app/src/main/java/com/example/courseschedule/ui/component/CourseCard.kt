@@ -1,4 +1,4 @@
-﻿package com.example.courseschedule.ui.component
+package com.example.courseschedule.ui.component
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -45,7 +45,7 @@ fun CourseCard(item: CourseWithSchedule, isCurrent: Boolean, nextInfo: String?, 
                     Text(" \u2714 \u5f53\u524d ", fontSize = 10.sp, color = Color.White, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                 }
             }
-            Text(DateUtils.getPeriodTimeRange(item.schedule.startPeriod, item.schedule.endPeriod), fontSize = 12.sp, color = fg.copy(alpha = 0.7f))
+            Text(DateUtils.getPeriodTimeRangeStatic(item.schedule.startPeriod, item.schedule.endPeriod), fontSize = 12.sp, color = fg.copy(alpha = 0.7f))
         }
         Spacer(modifier = Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -66,3 +66,4 @@ fun CourseCard(item: CourseWithSchedule, isCurrent: Boolean, nextInfo: String?, 
         }
     }
 }
+

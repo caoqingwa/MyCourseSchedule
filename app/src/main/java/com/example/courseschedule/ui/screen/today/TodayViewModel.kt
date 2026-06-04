@@ -1,4 +1,4 @@
-﻿package com.example.courseschedule.ui.screen.today
+package com.example.courseschedule.ui.screen.today
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
@@ -12,7 +12,7 @@ import com.example.courseschedule.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
-import java.util.*
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -21,7 +21,7 @@ class TodayViewModel @Inject constructor(
     @ApplicationContext val context: Context
 ) : ViewModel() {
 
-    private val todayMillis = Calendar.getInstance().timeInMillis
+    private val todayMillis = System.currentTimeMillis()
     val dayOfWeek = DateUtils.getDayOfWeek(todayMillis)
 
     data class TodayUiState(
@@ -30,65 +30,68 @@ class TodayViewModel @Inject constructor(
         val currentCourse: CourseWithSchedule? = null,
         val currentPeriod: Int = 0,
         val totalRemaining: Int = 0,
-        val isEmpty: Boolean = true
+        val isEmpty: Boolean = true,
+        val presets: List<Semester> = emptyList()
     )
 
     val uiState: StateFlow<TodayUiState> = repository.getCurrentSemester().flatMapLatest { semester ->
-        if (semester == null) {
-            flowOf(TodayUiState())
-        } else {
-            repository.getSchedulesBySemester(semester.id).map { schedules ->
-                val currentWeek = DateUtils.getWeekNumber(todayMillis, semester.startDate)
-                val activeSchedules = schedules.filter {
-                    it.dayOfWeek == dayOfWeek && DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, currentWeek)
-                }.sortedBy { it.startPeriod }
+        repository.getAllSemesters().flatMapLatest { presets ->
+            if (semester == null) {
+                flowOf(TodayUiState(presets = presets))
+            } else {
+                repository.getSchedulesBySemester(semester.id).map { schedules ->
+                    val currentWeek = DateUtils.getWeekNumber(todayMillis, semester.startDate)
+                    val activeSchedules = schedules.filter {
+                        it.dayOfWeek == dayOfWeek && DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, currentWeek)
+                    }.sortedBy { it.startPeriod }
 
-                val currentPeriod = Calendar.getInstance().get(Calendar.HOUR_OF_DAY).let { h ->
-                    when {
-                        h < 8 -> 0
-                        h < 9 -> 1
-                        h < 10 -> 2
-                        h < 11 -> 3
-                        h < 12 -> 4
-                        h < 14 -> 5
-                        h < 15 -> 6
-                        h < 16 -> 7
-                        h < 17 -> 8
-                        h < 19 -> 9
-                        h < 20 -> 10
-                        h < 21 -> 11
-                        else -> 12
+                    val currentPeriod = DateUtils.getCurrentPeriod(semester)
+
+                    var current: CourseWithSchedule? = null
+                    val upcoming = mutableListOf<CourseWithSchedule>()
+                    activeSchedules.forEach { sched ->
+                        val course = repository.getCourseById(sched.courseId) ?: Course(
+                            id = sched.courseId, semesterId = semester.id,
+                            name = "\u8bfe\u7a0b" + sched.courseId, teacher = "", color = "#CBE8BE"
+                        )
+                        val roomName = course.roomId?.let { repository.getRoomById(it)?.name }
+                        val cws = CourseWithSchedule(course, sched, roomName)
+                        if (sched.startPeriod <= currentPeriod && sched.endPeriod >= currentPeriod) current = cws
+                        else if (sched.startPeriod > currentPeriod) upcoming.add(cws)
                     }
-                }
 
-                var current: CourseWithSchedule? = null
-                val upcoming = mutableListOf<CourseWithSchedule>()
-                activeSchedules.forEach { sched ->
-                    val course = repository.getCourseById(sched.courseId) ?: Course(
-                        id = sched.courseId,
-                        semesterId = semester.id,
-                        name = "\u8bfe\u7a0b" + sched.courseId,
-                        teacher = "",
-                        color = "#CBE8BE"
+                    TodayUiState(
+                        semester = semester, upcomingCourses = upcoming, currentCourse = current,
+                        currentPeriod = currentPeriod,
+                        totalRemaining = if (current != null) upcoming.size + 1 else upcoming.size,
+                        isEmpty = activeSchedules.isEmpty(),
+                        presets = presets
                     )
-                    val roomName = course.roomId?.let { repository.getRoomById(it)?.name }
-                    val cws = CourseWithSchedule(course, sched, roomName)
-                    if (sched.startPeriod <= currentPeriod && sched.endPeriod >= currentPeriod) {
-                        current = cws
-                    } else if (sched.startPeriod > currentPeriod) {
-                        upcoming.add(cws)
-                    }
                 }
-
-                TodayUiState(
-                    semester = semester,
-                    upcomingCourses = upcoming,
-                    currentCourse = current,
-                    currentPeriod = currentPeriod,
-                    totalRemaining = if (current != null) upcoming.size + 1 else upcoming.size,
-                    isEmpty = activeSchedules.isEmpty()
-                )
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TodayUiState())
+
+    fun saveSemester(name: String, startDateMillis: Long, totalWeeks: Int, periodCount: Int, periodTimesJson: String) {
+        viewModelScope.launch {
+            val current = repository.getCurrentSemester().first()
+            if (current != null) {
+                repository.updateSemester(current.copy(
+                    name = name, startDate = startDateMillis, totalWeeks = totalWeeks,
+                    periodCount = periodCount, periodTimesJson = periodTimesJson
+                ))
+            } else {
+                repository.insertSemester(Semester(
+                    name = name, startDate = startDateMillis, totalWeeks = totalWeeks,
+                    periodCount = periodCount, periodTimesJson = periodTimesJson
+                ))
+            }
+        }
+    }
+
+    fun deletePreset(semester: Semester) {
+        viewModelScope.launch {
+            repository.deleteSemester(semester)
+        }
+    }
 }
