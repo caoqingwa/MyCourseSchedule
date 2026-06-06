@@ -1,8 +1,12 @@
-﻿package com.example.courseschedule.ui.component
+package com.example.courseschedule.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -243,10 +247,18 @@ fun SemesterSetupDialog(
                 }
 
                 // Inline time editor — appears below the list, inside the same Box
-                AnimatedVisibility(
+                val editorHeight by animateDpAsState(
+                    targetValue = if (isEditing) 240.dp else 0.dp,
+                    animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+                    label = "editorHeight"
+                )
+                androidx.compose.animation.AnimatedVisibility(
                     visible = isEditing,
-                    enter = expandVertically(expandFrom = Alignment.Top),
-                    exit = shrinkVertically(shrinkTowards = Alignment.Top),
+                    enter = fadeIn(animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)),
+                    exit = fadeOut(animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow)),
                     modifier = Modifier.align(Alignment.TopStart).offset(y = 220.dp)
                 ) {
                     Card(
@@ -394,5 +406,8 @@ private fun ScrollNumberPicker(
         )
     }
 }
+
+
+
 
 

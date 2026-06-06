@@ -1,8 +1,10 @@
 package com.example.courseschedule.ui.screen.today
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -121,7 +123,26 @@ fun TodayScreen(
                         val next = state.upcomingCourses[idx + 1]
                         "\u4e0b\u4e00\u8282\uff1a" + next.course.name + " " + next.schedule.startPeriod + "-" + next.schedule.endPeriod + "\u8282"
                     } else null
-                    CourseCard(item, isCurrent = false, nextInfo = nxt, onClick = { onCourseClick(item.course.id) })
+                    val animDelay = idx * 50
+                    val animProgress = remember { Animatable(0f) }
+                    LaunchedEffect(Unit) {
+                        animProgress.animateTo(
+                            targetValue = 1f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioLowBouncy,
+                                stiffness = Spring.StiffnessLow,
+                                visibilityThreshold = 0.01f
+                            )
+                        )
+                    }
+                    Box(
+                        modifier = Modifier.graphicsLayer {
+                            translationY = (1f - animProgress.value) * 40f
+                            alpha = animProgress.value
+                        }
+                    ) {
+                        CourseCard(item, isCurrent = false, nextInfo = nxt, onClick = { onCourseClick(item.course.id) })
+                    }
                 }
             }
         }
@@ -141,3 +162,5 @@ fun TodayScreen(
         )
     }
 }
+
+

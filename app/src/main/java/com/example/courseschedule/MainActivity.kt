@@ -1,4 +1,4 @@
-﻿package com.example.courseschedule
+package com.example.courseschedule
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -10,6 +10,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.util.lerp
 import com.example.courseschedule.ui.navigation.Screen
 import com.example.courseschedule.ui.navigation.bottomNavItems
 import com.example.courseschedule.ui.navigation.NavigationState
@@ -20,6 +22,7 @@ import com.example.courseschedule.ui.screen.calendar.CalendarScreen
 import com.example.courseschedule.ui.theme.CourseScheduleTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -38,9 +41,7 @@ class MainActivity : ComponentActivity() {
 fun MainApp() {
     val pagerState = rememberPagerState(pageCount = { 3 })
     val coroutineScope = rememberCoroutineScope()
-
-    // Map pager index <-> Screen
-    val screens = bottomNavItems // [Today=0, Week=1, Calendar=2]
+    val screens = bottomNavItems
 
     Scaffold(
         bottomBar = {
@@ -65,25 +66,35 @@ fun MainApp() {
                 .fillMaxSize(),
             userScrollEnabled = true
         ) { page ->
-            when (page) {
-                0 -> TodayScreen(onCourseClick = { })
-                1 -> WeekScreen(onCourseClick = { })
-                2 -> CalendarScreen(
-                    onDayClick = { _, weekNumber ->
-                        NavigationState.targetWeek = weekNumber
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(1)
-                        }
-                    },
-                    onNavigateToToday = {
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(0)
-                        }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        val pageOffset = (
+                            (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                        ).absoluteValue.coerceIn(0f, 1f)
+                        // Gentle fade on adjacent pages only
+                        alpha = lerp(1f, 0.85f, pageOffset)
                     }
-                )
+            ) {
+                when (page) {
+                    0 -> TodayScreen(onCourseClick = { })
+                    1 -> WeekScreen(onCourseClick = { })
+                    2 -> CalendarScreen(
+                        onDayClick = { _, weekNumber ->
+                            NavigationState.targetWeek = weekNumber
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(1)
+                            }
+                        },
+                        onNavigateToToday = {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(0)
+                            }
+                        }
+                    )
+                }
             }
         }
     }
 }
-
-

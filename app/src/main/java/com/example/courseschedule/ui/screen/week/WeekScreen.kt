@@ -2,18 +2,18 @@
 
 import android.annotation.SuppressLint
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -30,6 +30,8 @@ import com.example.courseschedule.ui.component.EditCourseDialog
 import com.example.courseschedule.ui.component.SemesterSetupDialog
 import com.example.courseschedule.ui.component.WeekGrid
 import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,14 +55,32 @@ fun WeekScreen(
     var editSchedule by remember { mutableStateOf<Schedule?>(null) }
 
     val selectedWeek = state.selectedWeek
-    val swipeThreshold = 80f
     val scope = rememberCoroutineScope()
 
     val density = LocalDensity.current
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val screenPx = with(density) { screenWidthDp.dp.toPx() }
-    val offsetX = remember { Animatable(0f) }
-    val contentAlpha = remember { Animatable(1f) }
+    val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
+
+    // Real-time follow-finger offset (set directly, no coroutine)
+    var visualOffset by remember { mutableFloatStateOf(0f) }
+    // Animatable only used for snap-back animation after release
+    val snapBackOffset = remember { Animatable(0f) }
+    var isAnimatingBack by remember { mutableStateOf(false) }
+
+
+    val bounceBackSpring = spring<Float>(
+        dampingRatio = Spring.DampingRatioLowBouncy,
+        stiffness = Spring.StiffnessLow
+    )
+
+    // Compute the actual translation: either live drag or animating back
+    val currentTranslationX by remember {
+        derivedStateOf {
+            if (isAnimatingBack) snapBackOffset.value else visualOffset
+        }
+    }
+    fun performWeekSwitch(newWeek: Int) {
+        viewModel.selectWeek(newWeek)
+    }
 
     Scaffold(
         topBar = {
@@ -80,7 +100,7 @@ fun WeekScreen(
                         if (selectedWeek != state.currentWeek) {
                             Spacer(modifier = Modifier.width(6.dp))
                             FilledTonalButton(
-                                onClick = { viewModel.selectWeek(state.currentWeek) },
+                                onClick = { performWeekSwitch(state.currentWeek) },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                                 modifier = Modifier.height(28.dp)
                             ) {
@@ -100,95 +120,120 @@ fun WeekScreen(
         },
         content = { innerPadding ->
             Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+                // Week navigation bar with arrows
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { if (selectedWeek > 1) viewModel.selectWeek(selectedWeek - 1) }) {
-                        Text("\u25c0 \u4e0a\u4e00\u5468", fontSize = 13.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { if (selectedWeek > 1) performWeekSwitch(selectedWeek - 1) },
+                            enabled = selectedWeek > 1,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.ChevronLeft, contentDescription = null, modifier = Modifier.size(22.dp))
+                        }
+                        val weekRange = state.currentPage.weekRange
+                        if (weekRange.isNotEmpty()) {
+                            Text(weekRange, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(
+                            onClick = { if (selectedWeek < state.totalWeeks) performWeekSwitch(selectedWeek + 1) },
+                            enabled = selectedWeek < state.totalWeeks,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(22.dp))
+                        }
                     }
-                    Text(
-                        "\u7b2c${selectedWeek}\u5468 \u00b7 ${state.currentPage.weekRange}",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(onClick = { if (selectedWeek < state.totalWeeks) viewModel.selectWeek(selectedWeek + 1) }) {
-                        Text("\u4e0b\u4e00\u5468 \u25b6", fontSize = 13.sp)
+                    if (selectedWeek != state.currentWeek) {
+                        FilledTonalButton(
+                            onClick = { performWeekSwitch(state.currentWeek) },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.height(26.dp)
+                        ) {
+                            Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(11.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("\u672c\u5468", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
 
-                val weekScrollState = rememberScrollState()
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight()
-                        .clipToBounds()
-                        .pointerInput(selectedWeek) {
-                            detectHorizontalDragGestures(
-                                onDragEnd = {
-                                    val cur = offsetX.value
-                                    val goNext = cur < -swipeThreshold && selectedWeek < state.totalWeeks
-                                    val goPrev = cur > swipeThreshold && selectedWeek > 1
-                                    scope.launch {
-                                        if (goNext || goPrev) {
-                                            val target = if (goNext) -screenPx else screenPx
-                                            // Phase 1: slide + fade out simultaneously
-                                            launch { contentAlpha.animateTo(0f, tween(180)) }
-                                            offsetX.animateTo(target, tween(250, easing = FastOutSlowInEasing))
-                                            // Phase 2: switch data while content is invisible
-                                            viewModel.selectWeek(if (goNext) selectedWeek + 1 else selectedWeek - 1)
-                                            // Phase 3: snap to opposite side
-                                            offsetX.snapTo(-target)
-                                            // Phase 4: slide + fade in simultaneously
-                                            launch { contentAlpha.animateTo(1f, tween(180)) }
-                                            offsetX.animateTo(0f, tween(250, easing = FastOutSlowInEasing))
-                                        } else {
-                                            offsetX.animateTo(0f, spring(dampingRatio = 0.8f, stiffness = 800f))
-                                        }
-                                    }
-                                },
-                                onHorizontalDrag = { _, dragAmount ->
-                                    scope.launch {
-                                        val canGoLeft = selectedWeek < state.totalWeeks
-                                        val canGoRight = selectedWeek > 1
-                                        val newOffset = when {
-                                            dragAmount > 0 && !canGoRight -> (offsetX.value + dragAmount * 0.3f).coerceAtMost(screenPx * 0.3f)
-                                            dragAmount < 0 && !canGoLeft -> (offsetX.value + dragAmount * 0.3f).coerceAtLeast(-screenPx * 0.3f)
-                                            else -> (offsetX.value + dragAmount).coerceIn(-screenPx, screenPx)
-                                        }
-                                        offsetX.snapTo(newOffset)
-                                    }
-                                }
-                            )
-                        },
-                    contentAlignment = Alignment.TopStart
-                ) {
+
+                // Grid area with horizontal swipe
+                val weekScrollState = rememberScrollState()
+                var hDragAccum by remember { mutableFloatStateOf(0f) }
+                var hLastDx by remember { mutableFloatStateOf(0f) }
+                var hDragging by remember { mutableStateOf(false) }
+
+                Box(modifier = Modifier.fillMaxSize()) {
                     Column(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .fillMaxSize()
                             .verticalScroll(weekScrollState)
-                            .graphicsLayer {
-                                translationX = offsetX.value
-                                alpha = contentAlpha.value
-                            }
                     ) {
-                        WeekGrid(
-                            schedules = state.currentPage.schedules,
-                            courses = state.currentPage.courseMap,
-                            roomMap = state.currentPage.roomMap,
-                            semester = state.semester,
-                            currentDayOfWeek = state.currentDayOfWeek,
-                            modifier = Modifier.fillMaxWidth(),
-                            onCellClick = { course, _ -> onCourseClick(course.id) },
-                            onCellLongClick = { day, period ->
-                                longPressDay = day; longPressPeriod = period; showAddDialog = true
-                            },
-                            onCourseLongClick = { course, schedule ->
-                                editCourse = course; editSchedule = schedule; showEditDialog = true
-                            }
-                        )
+                        Box(
+                            modifier = Modifier
+                                .graphicsLayer { translationX = currentTranslationX }
+                                .pointerInput(selectedWeek, state.totalWeeks) {
+                                    detectHorizontalDragGestures(
+                                        onDragStart = { hDragAccum = 0f; hDragging = true },
+                                        onDragEnd = {
+                                            val velocity = hLastDx / 0.016f
+                                            val vThresh = 800f
+                                            val dThresh = screenWidthPx * 0.3f
+                                            val cur = viewModel.uiState.value.selectedWeek
+                                            val goRight = velocity < -vThresh || hDragAccum < -dThresh
+                                            val goLeft = velocity > vThresh || hDragAccum > dThresh
+                                            if ((goRight && cur < state.totalWeeks) || (goLeft && cur > 1)) {
+                                                if (goRight) performWeekSwitch(cur + 1)
+                                                else performWeekSwitch(cur - 1)
+                                            } else {
+                                                isAnimatingBack = true
+                                                scope.launch {
+                                                    snapBackOffset.snapTo(visualOffset)
+                                                    snapBackOffset.animateTo(0f, bounceBackSpring)
+                                                    isAnimatingBack = false
+                                                    visualOffset = 0f
+                                                }
+                                            }
+                                            hDragAccum = 0f; hDragging = false
+                                        },
+                                        onDragCancel = { hDragAccum = 0f; hDragging = false },
+                                        onHorizontalDrag = { change, dragAmount ->
+                                            change.consume()
+                                            hDragAccum += dragAmount
+                                            hLastDx = dragAmount
+                                            val cur = viewModel.uiState.value.selectedWeek
+                                            val atLeft = hDragAccum > 0 && cur <= 1
+                                            val atRight = hDragAccum < 0 && cur >= state.totalWeeks
+                                            val deadZone = screenWidthPx * 0.05f
+                                            val effective = if (hDragAccum > 0) (hDragAccum - deadZone).coerceAtLeast(0f) else (hDragAccum + deadZone).coerceAtMost(0f)
+                                            visualOffset = if (atLeft || atRight) effective * 0.25f
+                                            else effective.coerceIn(-screenWidthPx * 0.5f, screenWidthPx * 0.5f)
+                                        }
+                                    )
+                                }
+                        ) {
+                            WeekGrid(
+                                schedules = state.currentPage.schedules,
+                                courses = state.currentPage.courseMap,
+                                roomMap = state.currentPage.roomMap,
+                                semester = state.semester,
+                                currentDayOfWeek = state.currentDayOfWeek,
+                                modifier = Modifier.fillMaxWidth(),
+                                onCellClick = { course, _ -> onCourseClick(course.id) },
+                                onCellLongClick = { day, period ->
+                                    longPressDay = day; longPressPeriod = period; showAddDialog = true
+                                },
+                                onCourseLongClick = { course, schedule ->
+                                    editCourse = course; editSchedule = schedule; showEditDialog = true
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -252,7 +297,6 @@ fun WeekScreen(
         )
     }
 }
-
 
 
 

@@ -1,7 +1,9 @@
 package com.example.courseschedule.ui.component
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -15,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -123,12 +126,13 @@ fun CalendarPicker(
         }
 
         val monthKey = currentYear * 100 + currentMonth
+        val slideSpec = tween<IntOffset>(durationMillis = 280, easing = FastOutSlowInEasing)
         AnimatedContent(
             targetState = monthKey,
             transitionSpec = {
                 val dir = if (targetState > initialState) 1 else -1
-                (slideInHorizontally(tween(280)) { it * dir / 3 })
-                    .togetherWith(slideOutHorizontally(tween(280)) { -it * dir / 3 })
+                (slideInHorizontally(slideSpec) { it * dir / 3 } + fadeIn(tween(200)))
+                    .togetherWith(slideOutHorizontally(slideSpec) { -it * dir / 3 } + fadeOut(tween(150)))
             },
             label = "monthSlide"
         ) {
