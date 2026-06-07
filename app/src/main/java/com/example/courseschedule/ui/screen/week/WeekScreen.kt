@@ -79,6 +79,7 @@ fun WeekScreen(
         }
     }
     fun performWeekSwitch(newWeek: Int) {
+        visualOffset = 0f; isAnimatingBack = false
         viewModel.selectWeek(newWeek)
     }
 
