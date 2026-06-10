@@ -1,4 +1,4 @@
-﻿package com.example.courseschedule.ui.screen.week
+package com.example.courseschedule.ui.screen.week
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,9 +11,11 @@ import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.ui.theme.CourseColors
 import com.example.courseschedule.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
@@ -38,9 +40,16 @@ class WeekViewModel @Inject constructor(
         val currentDayOfWeek: Int = 1,
         val totalWeeks: Int = 20,
         val currentPage: WeekPageData = WeekPageData(),
-        val prevPage: WeekPageData? = null,
-        val nextPage: WeekPageData? = null,
         val presets: List<Semester> = emptyList()
+    )
+
+    private data class WeekLoadInput(
+        val semester: Semester,
+        val schedules: List<Schedule>,
+        val courses: List<Course>,
+        val rooms: List<Room>,
+        val presets: List<Semester>,
+        val selectedWeek: Int
     )
 
     private val _selectedWeek = MutableStateFlow(0)
@@ -81,57 +90,56 @@ class WeekViewModel @Inject constructor(
         return WeekPageData(schedules = active, courseMap = courses, roomMap = roomMap, weekRange = rangeStr)
     }
 
-    val uiState: StateFlow<WeekUiState> = combine(
-        repository.getCurrentSemester(), _selectedWeek
-    ) { semester, selectedWeek -> semester to selectedWeek }
-    .flatMapLatest { (semester, selectedWeek) ->
-        if (semester == null) return@flatMapLatest flowOf(WeekUiState())
+    val uiState: StateFlow<WeekUiState> = repository.getCurrentSemester()
+        .flatMapLatest { semester ->
+            if (semester == null) {
+                flowOf(WeekUiState())
+            } else {
+                combine(
+                    repository.getSchedulesBySemester(semester.id),
+                    repository.getCoursesBySemester(semester.id),
+                    repository.getAllRooms(),
+                    repository.getAllSemesters(),
+                    _selectedWeek
+                ) { schedules, courses, rooms, presets, selectedWeek ->
+                    WeekLoadInput(
+                        semester = semester,
+                        schedules = schedules,
+                        courses = courses,
+                        rooms = rooms,
+                        presets = presets,
+                        selectedWeek = selectedWeek
+                    )
+                }.mapLatest { input ->
+                    withContext(Dispatchers.Default) {
+                        val now = System.currentTimeMillis()
+                        val currentWeek = DateUtils.getWeekNumber(now, input.semester.startDate)
+                        val dow = DateUtils.getDayOfWeek(now)
+                        val displayWeek = (if (input.selectedWeek > 0) input.selectedWeek else currentWeek)
+                            .coerceIn(1, input.semester.totalWeeks)
 
-        val now = System.currentTimeMillis()
-        val currentWeek = DateUtils.getWeekNumber(now, semester.startDate)
-        val dow = DateUtils.getDayOfWeek(now)
+                        val currentPage = buildWeekPage(
+                            input.schedules,
+                            input.courses.associateBy { it.id },
+                            input.rooms.associateBy({ it.id }, { it.name }),
+                            input.semester,
+                            displayWeek
+                        )
 
-        if (selectedWeek == 0) {
-            _selectedWeek.value = currentWeek
-            return@flatMapLatest flowOf(WeekUiState())
-        }
-
-        flow {
-            val allSchedules = repository.getSchedulesBySemester(semester.id).first()
-            val coursesMap = mutableMapOf<Long, Course>()
-            val roomMap = mutableMapOf<Long, String>()
-            allSchedules.forEach { s ->
-                if (!coursesMap.containsKey(s.courseId)) {
-                    repository.getCourseById(s.courseId)?.let { c ->
-                        coursesMap[s.courseId] = c
-                        c.roomId?.let { rid ->
-                            if (!roomMap.containsKey(rid)) {
-                                repository.getRoomById(rid)?.let { room -> roomMap[rid] = room.name }
-                            }
-                        }
+                        WeekUiState(
+                            semester = input.semester,
+                            currentWeek = currentWeek,
+                            selectedWeek = displayWeek,
+                            currentDayOfWeek = dow,
+                            totalWeeks = input.semester.totalWeeks,
+                            currentPage = currentPage,
+                            presets = input.presets
+                        )
                     }
                 }
             }
-
-            val currentPage = buildWeekPage(allSchedules, coursesMap, roomMap, semester, selectedWeek)
-            val prevPage = if (selectedWeek > 1) buildWeekPage(allSchedules, coursesMap, roomMap, semester, selectedWeek - 1) else null
-            val nextPage = if (selectedWeek < semester.totalWeeks) buildWeekPage(allSchedules, coursesMap, roomMap, semester, selectedWeek + 1) else null
-
-            val presets = repository.getAllSemesters().first()
-
-            emit(WeekUiState(
-                semester = semester,
-                currentWeek = currentWeek,
-                selectedWeek = selectedWeek,
-                currentDayOfWeek = dow,
-                totalWeeks = semester.totalWeeks,
-                currentPage = currentPage,
-                prevPage = prevPage,
-                nextPage = nextPage,
-                presets = presets
-            ))
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WeekUiState())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WeekUiState())
 
     fun selectWeek(week: Int) {
         _selectedWeek.value = week.coerceIn(1, uiState.value.totalWeeks.coerceAtLeast(1))
@@ -202,8 +210,8 @@ class WeekViewModel @Inject constructor(
 
     fun deleteCourse(courseId: Long) {
         viewModelScope.launch {
-            val course = repository.getCourseById(courseId) ?: return@launch
             repository.deleteSchedulesByCourseId(courseId)
+            val course = repository.getCourseById(courseId) ?: return@launch
             repository.deleteCourse(course)
         }
     }

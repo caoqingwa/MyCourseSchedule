@@ -1,4 +1,4 @@
-package com.example.courseschedule.ui.component
+﻿package com.example.courseschedule.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
 import com.example.courseschedule.data.db.entity.Semester
+import kotlin.math.roundToInt
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -169,7 +170,7 @@ fun SemesterSetupDialog(
             Text("\u6bcf\u5929\u8282\u6570", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Slider(
                 value = periodCount.toFloat(),
-                onValueChange = { periodCount = it.toInt() },
+                onValueChange = { periodCount = it.roundToInt() },
                 valueRange = 4f..16f,
                 steps = 11,
                 onValueChangeFinished = {

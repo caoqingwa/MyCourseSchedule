@@ -9,6 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,7 +51,7 @@ fun WeekGrid(
     val endTimes = semester?.getEndTimes() ?: Semester.defaultPeriodTimes().map { it.end }
 
     data class MergedBlock(val course: Course, val schedule: Schedule, val startPeriod: Int, val endPeriod: Int)
-    val colBlocks = Array(5) { col ->
+    val colBlocks = remember(schedules, courses, totalPeriods) { Array(5) { col ->
         val daySchedules = schedules.filter { it.dayOfWeek == col + 1 }.sortedBy { it.startPeriod }
         val groups = daySchedules.groupBy { it.courseId * 100000 + it.weekType * 10000 + it.startWeek * 100 + it.endWeek }
         val result = mutableListOf<MergedBlock>()
@@ -64,12 +66,12 @@ fun WeekGrid(
             val base = groupSchedules.first()
             for ((sp, ep) in merged) result.add(MergedBlock(course, base.copy(startPeriod = sp, endPeriod = ep), sp, ep))
         }
-        result.sortedBy { it.startPeriod }
-    }
+        result.sortedBy { it.startPeriod } } }
 
-    val occupied = Array(totalPeriods) { BooleanArray(5) }
-    colBlocks.forEachIndexed { col, blocks ->
-        for (b in blocks) for (p in b.startPeriod..b.endPeriod) if (p in 1..totalPeriods) occupied[p - 1][col] = true
+    val occupied = remember(colBlocks, totalPeriods) {
+        Array(totalPeriods) { row ->
+            BooleanArray(5) { col -> colBlocks[col].any { it.startPeriod <= row + 1 && it.endPeriod >= row + 1 } }
+        }
     }
 
     val screenWidthDp = LocalConfiguration.current.screenWidthDp

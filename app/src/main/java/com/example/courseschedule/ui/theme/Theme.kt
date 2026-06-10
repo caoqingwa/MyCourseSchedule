@@ -21,9 +21,10 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun CourseScheduleTheme(content: @Composable () -> Unit) {
+    val isDark = isSystemInDarkTheme()
+    val context = LocalContext.current
     val colorScheme = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val context = LocalContext.current
-        if (isSystemInDarkTheme()) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else {
         LightColorScheme
     }

@@ -1,9 +1,47 @@
-﻿# CourseSchedule 更新日志
+# CourseSchedule 更新日志
+
+## v1.4 (2026-06-10)
+
+### 考试提醒功能
+- 新增考试实体（Exam），支持考试科目、日期、时间、地点、提前x小时提醒
+- 新增考试提醒 Worker（ExamReminderWorker），到达提醒时间自动推送通知
+- 长按日历日期直接弹出添加考试/提醒弹窗
+- 日历页显示考试卡片，点击查看详情，长按进入编辑
+- 详情页支持编辑和删除考试
+- 考试时间过去后自动删除提醒
+
+### 考试时间选择器
+- 滚轮式时间选择器，精确到15分钟
+- 支持选择考试日期、起止时间、提醒提前时间
+
+### 考试数据层
+- ExamDao 新增查询方法
+- DatabaseModule 添加 fallbackToDestructiveMigration
+- 数据库版本升级至 v3
+
+### 今日课程优化
+- 课程下课后立即从当日课表中消失（基于实际下课时间判断，不再仅依赖节次编号）
+- 当前课程精确判定：仅在上课时间段内显示为"当前"
+
+### UI 动画优化
+- 周课表左右切换 spring 动画优化
+- 日历月份滑动动画优化
+- BottomNavBar spring 缩放
+
+### Bug 修复
+- 修复 CalendarPicker 动画参数类型不匹配
+- 修复 BottomNavBar 弹簧参数缺失
+- 修复 SemesterSetupDialog AnimatedVisibility 上下文问题
+- 修复 WeekGrid FontWeight、TextOverflow、TextAlign 缺失导入
+- 修复周课表格子空格显示、连堂课断裂问题
+- 修复考试时间滚轮偏移选择错误
+
+---
 
 ## v1.3 (2026-06-07)
 
 ### 周课表滑动切换优化
-- 使用 detectHorizontalDragGestures 替代手写 waitPointerEventScope 循环，彻底解决垂直滚动卡顿问题
+- 使用 detectHorizontalDragGestures 替代手写 awaitPointerEventScope 循环，彻底解决垂直滚动卡顿问题
 - 速度判定：松手时检测拖拽速度，>800px/s 即切换
 - 距离判定：拖拽超过屏幕 30% 即切换（速度 OR 距离任一满足）
 - 5% 屏幕宽度死区：前 5% 拖拽不产生视觉位移
@@ -19,7 +57,7 @@
 - 底部导航栏 spring 缩放
 
 ### 依赖更新
-- 新增 ndroidx.compose.foundation:foundation 依赖
+- 新增 androidx.compose.foundation:foundation 依赖
 
 ---
 

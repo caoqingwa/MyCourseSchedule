@@ -30,7 +30,6 @@ import com.example.courseschedule.ui.component.EditCourseDialog
 import com.example.courseschedule.ui.component.SemesterSetupDialog
 import com.example.courseschedule.ui.component.WeekGrid
 import kotlinx.coroutines.launch
-import kotlin.math.absoluteValue
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,13 +70,6 @@ fun WeekScreen(
         dampingRatio = Spring.DampingRatioLowBouncy,
         stiffness = Spring.StiffnessLow
     )
-
-    // Compute the actual translation: either live drag or animating back
-    val currentTranslationX by remember {
-        derivedStateOf {
-            if (isAnimatingBack) snapBackOffset.value else visualOffset
-        }
-    }
     fun performWeekSwitch(newWeek: Int) {
         visualOffset = 0f; isAnimatingBack = false
         viewModel.selectWeek(newWeek)
@@ -166,11 +158,8 @@ fun WeekScreen(
 
                 // Grid area with horizontal swipe
                 val weekScrollState = rememberScrollState()
-                var hDragAccum by remember { mutableFloatStateOf(0f) }
-                var hLastDx by remember { mutableFloatStateOf(0f) }
-                var hDragging by remember { mutableStateOf(false) }
 
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f)) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -178,10 +167,12 @@ fun WeekScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .graphicsLayer { translationX = currentTranslationX }
+                                .graphicsLayer { translationX = if (isAnimatingBack) snapBackOffset.value else visualOffset }
                                 .pointerInput(selectedWeek, state.totalWeeks) {
+                                    var hDragAccum = 0f
+                                    var hLastDx = 0f
                                     detectHorizontalDragGestures(
-                                        onDragStart = { hDragAccum = 0f; hDragging = true },
+                                        onDragStart = { hDragAccum = 0f },
                                         onDragEnd = {
                                             val velocity = hLastDx / 0.016f
                                             val vThresh = 800f
@@ -201,9 +192,9 @@ fun WeekScreen(
                                                     visualOffset = 0f
                                                 }
                                             }
-                                            hDragAccum = 0f; hDragging = false
+                                            hDragAccum = 0f
                                         },
-                                        onDragCancel = { hDragAccum = 0f; hDragging = false },
+                                        onDragCancel = { hDragAccum = 0f },
                                         onHorizontalDrag = { change, dragAmount ->
                                             change.consume()
                                             hDragAccum += dragAmount

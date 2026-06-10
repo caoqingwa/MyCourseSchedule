@@ -1,4 +1,4 @@
-﻿package com.example.courseschedule.data.repository
+package com.example.courseschedule.data.repository
 
 import com.example.courseschedule.data.db.dao.*
 import com.example.courseschedule.data.db.entity.*
@@ -50,6 +50,7 @@ class CourseRepository @Inject constructor(
     suspend fun deleteSchedulesByCourseId(courseId: Long) = scheduleDao.deleteByCourseId(courseId)
 
     suspend fun insertRoom(room: Room): Long = roomDao.insert(room)
+    fun getAllRooms(): Flow<List<Room>> = roomDao.getAll()
     suspend fun getRoomById(id: Long): Room? = roomDao.getById(id)
     suspend fun updateRoom(roomId: Long, newName: String) {
         roomDao.getById(roomId)?.let { r: Room -> roomDao.update(r.copy(name = newName)) }
@@ -57,5 +58,7 @@ class CourseRepository @Inject constructor(
 
     fun getExamsBySemester(semesterId: Long): Flow<List<Exam>> = examDao.getBySemester(semesterId)
     suspend fun insertExam(exam: Exam): Long = examDao.insert(exam)
+    suspend fun updateExam(exam: Exam) = examDao.update(exam)
+    suspend fun deleteExam(exam: Exam) = examDao.delete(exam)
+    suspend fun deleteExpiredExams() = examDao.deleteExpired(System.currentTimeMillis())
 }
-

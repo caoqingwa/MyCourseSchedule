@@ -1,4 +1,4 @@
-﻿package com.example.courseschedule.util
+package com.example.courseschedule.util
 
 import android.app.PendingIntent
 import android.content.Context
@@ -26,11 +26,16 @@ object NotificationHelper {
         } catch (_: SecurityException) {}
     }
 
-    fun showExamReminder(context: Context, examName: String, daysLeft: Int) {
+    fun showExamReminder(context: Context, examName: String, hoursUntilExam: Int) {
+        val timeText = when {
+            hoursUntilExam >= 48 -> (hoursUntilExam / 24).toString() + " \u5929"
+            hoursUntilExam >= 24 -> "1 \u5929" + (hoursUntilExam % 24).toString() + "\u5c0f\u65f6"
+            else -> hoursUntilExam.toString() + " \u5c0f\u65f6"
+        }
         val notification = NotificationCompat.Builder(context, "exam_reminder")
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentTitle("\u8003\u8bd5\u63d0\u9192")
-            .setContentText(examName + " \u8fd8\u6709 " + daysLeft + " \u5929")
+            .setContentText(examName + " \u8fd8\u6709 " + timeText)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()

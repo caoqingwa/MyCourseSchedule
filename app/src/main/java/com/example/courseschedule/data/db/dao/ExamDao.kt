@@ -12,6 +12,12 @@ interface ExamDao {
     @Query("SELECT * FROM exams WHERE id = :id")
     suspend fun getById(id: Long): Exam?
 
+    @Query("SELECT * FROM exams WHERE examDate < :nowMillis")
+    suspend fun getExpired(nowMillis: Long): List<Exam>
+
+    @Query("DELETE FROM exams WHERE examDate < :nowMillis")
+    suspend fun deleteExpired(nowMillis: Long)
+
     @Insert
     suspend fun insert(exam: Exam): Long
 

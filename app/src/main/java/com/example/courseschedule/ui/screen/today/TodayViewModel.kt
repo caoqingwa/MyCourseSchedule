@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.courseschedule.data.db.entity.Course
-import com.example.courseschedule.data.db.entity.Schedule
 import com.example.courseschedule.data.db.entity.Semester
 import com.example.courseschedule.data.repository.CourseRepository
 import com.example.courseschedule.ui.component.CourseWithSchedule
@@ -13,6 +12,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.*
 import javax.inject.Inject
 
 @HiltViewModel
@@ -34,41 +34,81 @@ class TodayViewModel @Inject constructor(
         val presets: List<Semester> = emptyList()
     )
 
-    val uiState: StateFlow<TodayUiState> = repository.getCurrentSemester().flatMapLatest { semester ->
-        repository.getAllSemesters().flatMapLatest { presets ->
-            if (semester == null) {
-                flowOf(TodayUiState(presets = presets))
-            } else {
-                repository.getSchedulesBySemester(semester.id).map { schedules ->
-                    val currentWeek = DateUtils.getWeekNumber(todayMillis, semester.startDate)
-                    val activeSchedules = schedules.filter {
-                        it.dayOfWeek == dayOfWeek && DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, currentWeek)
-                    }.sortedBy { it.startPeriod }
+    private fun getPeriodEndMillis(period: Int, semester: Semester): Long {
+        val times = semester.getPeriodTimes()
+        val range = times.getOrNull(period - 1) ?: return 0L
+        val (h, m) = range.end.split(":").map { it.toIntOrNull() ?: 0 }
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = todayMillis
+            set(Calendar.HOUR_OF_DAY, h)
+            set(Calendar.MINUTE, m)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return cal.timeInMillis
+    }
 
-                    val currentPeriod = DateUtils.getCurrentPeriod(semester)
+    private fun getPeriodStartMillis(period: Int, semester: Semester): Long {
+        val times = semester.getPeriodTimes()
+        val range = times.getOrNull(period - 1) ?: return Long.MAX_VALUE
+        val (h, m) = range.start.split(":").map { it.toIntOrNull() ?: 0 }
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = todayMillis
+            set(Calendar.HOUR_OF_DAY, h)
+            set(Calendar.MINUTE, m)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return cal.timeInMillis
+    }
 
-                    var current: CourseWithSchedule? = null
-                    val upcoming = mutableListOf<CourseWithSchedule>()
-                    activeSchedules.forEach { sched ->
-                        val course = repository.getCourseById(sched.courseId) ?: Course(
-                            id = sched.courseId, semesterId = semester.id,
-                            name = "\u8bfe\u7a0b" + sched.courseId, teacher = "", color = "#CBE8BE"
-                        )
-                        val roomName = course.roomId?.let { repository.getRoomById(it)?.name }
-                        val cws = CourseWithSchedule(course, sched, roomName)
-                        if (sched.startPeriod <= currentPeriod && sched.endPeriod >= currentPeriod) current = cws
-                        else if (sched.startPeriod > currentPeriod) upcoming.add(cws)
-                    }
+    val uiState: StateFlow<TodayUiState> = combine(
+        repository.getCurrentSemester(),
+        repository.getAllSemesters()
+    ) { semester, presets -> semester to presets }
+    .flatMapLatest { (semester, presets) ->
+        if (semester == null) {
+            return@flatMapLatest flowOf(TodayUiState(presets = presets))
+        }
+        repository.getSchedulesBySemester(semester.id).map { schedules ->
+            val currentWeek = DateUtils.getWeekNumber(todayMillis, semester.startDate)
+            val activeSchedules = schedules.filter {
+                it.dayOfWeek == dayOfWeek && DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, currentWeek)
+            }.sortedBy { it.startPeriod }
 
-                    TodayUiState(
-                        semester = semester, upcomingCourses = upcoming, currentCourse = current,
-                        currentPeriod = currentPeriod,
-                        totalRemaining = if (current != null) upcoming.size + 1 else upcoming.size,
-                        isEmpty = activeSchedules.isEmpty(),
-                        presets = presets
-                    )
+            val now = System.currentTimeMillis()
+            val currentPeriod = DateUtils.getCurrentPeriod(semester)
+
+            val allCourses = repository.getCoursesBySemester(semester.id).first()
+            val courseMap = allCourses.associateBy { it.id }
+            val allRooms = repository.getAllRooms().first()
+            val roomMap = allRooms.associateBy({ it.id }, { it.name })
+
+            var current: CourseWithSchedule? = null
+            val upcoming = mutableListOf<CourseWithSchedule>()
+            activeSchedules.forEach { sched ->
+                val course = courseMap[sched.courseId] ?: Course(
+                    id = sched.courseId, semesterId = semester.id,
+                    name = "\u8bfe\u7a0b" + sched.courseId, teacher = "", color = "#CBE8BE"
+                )
+                val roomName = course.roomId?.let { roomMap[it] }
+                val cws = CourseWithSchedule(course, sched, roomName)
+                val endTime = getPeriodEndMillis(sched.endPeriod, semester)
+                val startTime = getPeriodStartMillis(sched.startPeriod, semester)
+                when {
+                    now < startTime -> upcoming.add(cws)
+                    now >= startTime && now < endTime -> current = cws
+                    else -> { /* course already finished, skip */ }
                 }
             }
+
+            TodayUiState(
+                semester = semester, upcomingCourses = upcoming, currentCourse = current,
+                currentPeriod = currentPeriod,
+                totalRemaining = if (current != null) upcoming.size + 1 else upcoming.size,
+                isEmpty = activeSchedules.isEmpty(),
+                presets = presets
+            )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TodayUiState())
 

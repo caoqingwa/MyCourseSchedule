@@ -4,8 +4,10 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -28,6 +30,7 @@ import kotlin.math.roundToInt
 
 private const val MILLIS_PER_DAY = 24 * 60 * 60 * 1000L
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CalendarPicker(
     currentMonth: Int,
@@ -38,6 +41,7 @@ fun CalendarPicker(
     totalWeeks: Int,
     onDayClick: (Long) -> Unit,
     onMonthChange: (Int, Int) -> Unit,
+    onDayLongPress: ((Long) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val dows = listOf("\u4e00", "\u4e8c", "\u4e09", "\u56db", "\u4e94", "\u516d", "\u65e5")
@@ -126,17 +130,17 @@ fun CalendarPicker(
         }
 
         val monthKey = currentYear * 100 + currentMonth
-        val slideSpec = tween<IntOffset>(durationMillis = 280, easing = FastOutSlowInEasing)
+        val slideAnimSpec = tween<IntOffset>(durationMillis = 280, easing = FastOutSlowInEasing)
         AnimatedContent(
             targetState = monthKey,
             transitionSpec = {
                 val dir = if (targetState > initialState) 1 else -1
-                (slideInHorizontally(slideSpec) { it * dir / 3 } + fadeIn(tween(200)))
-                    .togetherWith(slideOutHorizontally(slideSpec) { -it * dir / 3 } + fadeOut(tween(150)))
+                (slideInHorizontally(slideAnimSpec) + fadeIn(tween(200)))
+                    .togetherWith(slideOutHorizontally(slideAnimSpec) + fadeOut(tween(150)))
             },
             label = "monthSlide"
         ) {
-            MonthGrid(currentYear, currentMonth, todayMillis, semesterStartMillis, currentWeek, onDayClick)
+            MonthGrid(currentYear, currentMonth, todayMillis, semesterStartMillis, currentWeek, onDayClick, onDayLongPress)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -156,6 +160,7 @@ fun CalendarPicker(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MonthGrid(
     year: Int,
@@ -163,7 +168,8 @@ private fun MonthGrid(
     todayMillis: Long,
     semesterStartMillis: Long,
     currentWeek: Int,
-    onDayClick: (Long) -> Unit
+    onDayClick: (Long) -> Unit,
+    onDayLongPress: ((Long) -> Unit)? = null
 ) {
     val cal = Calendar.getInstance()
     cal.set(year, month, 1)
@@ -186,27 +192,40 @@ private fun MonthGrid(
                         val isToday = DateUtils.isToday(dayMillis)
                         val weekNum = DateUtils.getWeekNumber(dayMillis, semesterStartMillis)
                         val inWeek = weekNum == currentWeek
-                        Box(
-                            modifier = Modifier.weight(1f).height(32.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    when {
-                                        isToday -> MaterialTheme.colorScheme.primary
-                                        inWeek -> MaterialTheme.colorScheme.primaryContainer
-                                        else -> MaterialTheme.colorScheme.surfaceContainer
-                                    }
-                                )
-                                .clickable { onDayClick(dayMillis) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                d.toString(), fontSize = 12.sp,
-                                color = when {
-                                    isToday -> MaterialTheme.colorScheme.onPrimary
-                                    inWeek -> MaterialTheme.colorScheme.onPrimaryContainer
-                                    else -> MaterialTheme.colorScheme.onSurface
-                                }
-                            )
+                        val bg = when {
+                            isToday -> MaterialTheme.colorScheme.primary
+                            inWeek -> MaterialTheme.colorScheme.primaryContainer
+                            else -> MaterialTheme.colorScheme.surfaceContainer
+                        }
+                        val fg = when {
+                            isToday -> MaterialTheme.colorScheme.onPrimary
+                            inWeek -> MaterialTheme.colorScheme.onPrimaryContainer
+                            else -> MaterialTheme.colorScheme.onSurface
+                        }
+
+                        if (onDayLongPress != null) {
+                            Box(
+                                modifier = Modifier.weight(1f).height(32.dp)
+                                    .clip(CircleShape)
+                                    .background(bg)
+                                    .combinedClickable(
+                                        onClick = { onDayClick(dayMillis) },
+                                        onLongClick = { onDayLongPress(dayMillis) }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(d.toString(), fontSize = 12.sp, color = fg)
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier.weight(1f).height(32.dp)
+                                    .clip(CircleShape)
+                                    .background(bg)
+                                    .clickable { onDayClick(dayMillis) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(d.toString(), fontSize = 12.sp, color = fg)
+                            }
                         }
                         day++
                     }

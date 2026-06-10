@@ -30,7 +30,9 @@ fun TodayScreen(
     viewModel: TodayViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val todayStr = SimpleDateFormat("yyyy\u5e74M\u6708d\u65e5 \u00b7 EEEE", Locale.CHINESE).format(Date())
+    val todayStr = remember {
+        SimpleDateFormat("yyyy\u5e74M\u6708d\u65e5 \u00b7 EEEE", Locale.CHINESE).format(Date())
+    }
     var showSemesterDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.upcomingCourses) {
@@ -48,7 +50,7 @@ fun TodayScreen(
                     Text("\u8bfe\u7a0b\u8868", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.width(8.dp))
                     state.semester?.let { sem ->
-                        val wk = DateUtils.getWeekNumber(System.currentTimeMillis(), sem.startDate)
+                        val wk = remember(state) { DateUtils.getWeekNumber(System.currentTimeMillis(), sem.startDate) }
                         Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.small) {
                             Text(
                                 "\u7b2c${wk}\u5468",
@@ -103,7 +105,7 @@ fun TodayScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(vertical = 12.dp)
             ) {
-                item {
+                item(key = "header") {
                     Text(
                         "\u4eca\u65e5\u5269\u4f59 " + state.totalRemaining + " \u8282\u8bfe",
                         fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
@@ -111,38 +113,24 @@ fun TodayScreen(
                     )
                 }
                 state.currentCourse?.let { cws ->
-                    item {
-                        val nxt = state.upcomingCourses.firstOrNull()?.let {
-                            "\u4e0b\u4e00\u8282\uff1a" + it.course.name + " " + it.schedule.startPeriod + "-" + it.schedule.endPeriod + "\u8282"
+                    item(key = "current") {
+                        val nxt = remember(state) {
+                            state.upcomingCourses.firstOrNull()?.let {
+                                "\u4e0b\u4e00\u8282\uff1a" + it.course.name + " " + it.schedule.startPeriod + "-" + it.schedule.endPeriod + "\u8282"
+                            }
                         }
                         CourseCard(cws, isCurrent = true, nextInfo = nxt, onClick = { onCourseClick(cws.course.id) })
                     }
                 }
-                itemsIndexed(state.upcomingCourses) { idx, item ->
+                itemsIndexed(
+                    items = state.upcomingCourses,
+                    key = { _, item -> item.course.id * 1000 + item.schedule.startPeriod }
+                ) { idx, item ->
                     val nxt = if (idx < state.upcomingCourses.lastIndex) {
                         val next = state.upcomingCourses[idx + 1]
                         "\u4e0b\u4e00\u8282\uff1a" + next.course.name + " " + next.schedule.startPeriod + "-" + next.schedule.endPeriod + "\u8282"
                     } else null
-                    val animDelay = idx * 50
-                    val animProgress = remember { Animatable(0f) }
-                    LaunchedEffect(Unit) {
-                        animProgress.animateTo(
-                            targetValue = 1f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioLowBouncy,
-                                stiffness = Spring.StiffnessLow,
-                                visibilityThreshold = 0.01f
-                            )
-                        )
-                    }
-                    Box(
-                        modifier = Modifier.graphicsLayer {
-                            translationY = (1f - animProgress.value) * 40f
-                            alpha = animProgress.value
-                        }
-                    ) {
-                        CourseCard(item, isCurrent = false, nextInfo = nxt, onClick = { onCourseClick(item.course.id) })
-                    }
+                    CourseCard(item, isCurrent = false, nextInfo = nxt, onClick = { onCourseClick(item.course.id) })
                 }
             }
         }
@@ -162,5 +150,3 @@ fun TodayScreen(
         )
     }
 }
-
-
