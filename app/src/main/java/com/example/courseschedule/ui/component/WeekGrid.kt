@@ -33,6 +33,7 @@ fun WeekGrid(
     roomMap: Map<Long, String> = emptyMap(),
     semester: Semester?,
     currentDayOfWeek: Int,
+    highlightDayOfWeek: Int = 0,
     onCellClick: (Course, Schedule) -> Unit,
     onCellLongClick: (dayOfWeek: Int, period: Int) -> Unit,
     onCourseLongClick: (Course, Schedule) -> Unit,
@@ -51,7 +52,9 @@ fun WeekGrid(
     val endTimes = semester?.getEndTimes() ?: Semester.defaultPeriodTimes().map { it.end }
 
     data class MergedBlock(val course: Course, val schedule: Schedule, val startPeriod: Int, val endPeriod: Int)
-    val colBlocks = remember(schedules, courses, totalPeriods) { Array(5) { col ->
+    val schedulesKey = schedules.hashCode()
+    val coursesKey = courses.keys.hashCode()
+    val colBlocks = remember(schedulesKey, coursesKey, totalPeriods) { Array(5) { col ->
         val daySchedules = schedules.filter { it.dayOfWeek == col + 1 }.sortedBy { it.startPeriod }
         val groups = daySchedules.groupBy { it.courseId * 100000 + it.weekType * 10000 + it.startWeek * 100 + it.endWeek }
         val result = mutableListOf<MergedBlock>()
@@ -68,7 +71,7 @@ fun WeekGrid(
         }
         result.sortedBy { it.startPeriod } } }
 
-    val occupied = remember(colBlocks, totalPeriods) {
+    val occupied = remember(colBlocks.map { it.size }, totalPeriods) {
         Array(totalPeriods) { row ->
             BooleanArray(5) { col -> colBlocks[col].any { it.startPeriod <= row + 1 && it.endPeriod >= row + 1 } }
         }
@@ -89,16 +92,18 @@ fun WeekGrid(
                 Text("\u8282\u6b21", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
             }
             for (i in dayNames.indices) {
-                val isToday = (i + 1) == currentDayOfWeek
+                val dayNum = i + 1
+                val isHighlighted = if (highlightDayOfWeek > 0) dayNum == highlightDayOfWeek
+                    else dayNum == currentDayOfWeek
                 Box(
                     modifier = Modifier.width(colWidthDp.dp).fillMaxHeight()
                         .border(0.8.dp, borderColor, cellShape)
-                        .background(if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer),
+                        .background(if (isHighlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         dayNames[i], fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                        color = if (isToday) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (isHighlighted) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -137,19 +142,11 @@ fun WeekGrid(
                                 .size(colWidthDp.dp, cellHeight)
                                 .border(0.8.dp, borderColor, cellShape)
                                 .clip(cellShape)
-                                .background(MaterialTheme.colorScheme.surface)
                                 .combinedClickable(
                                     onClick = {},
                                     onLongClick = { onCellLongClick(col + 1, row + 1) }
                                 ),
                             contentAlignment = Alignment.Center
-                        ) {}
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .offset(x, y)
-                                .size(colWidthDp.dp, cellHeight)
-                                .border(0.8.dp, borderColor, cellShape)
                         ) {}
                     }
                 }

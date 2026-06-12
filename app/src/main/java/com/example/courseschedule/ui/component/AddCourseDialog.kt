@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +21,8 @@ fun AddCourseDialog(
     period: Int,
     currentWeek: Int,
     totalWeeks: Int,
+    periodCount: Int = 12,
+    conflicts: List<Pair<String, Int>> = emptyList(),
     onDismiss: () -> Unit,
     onConfirm: (name: String, teacher: String, room: String, weekType: Int, startWeek: Int, endWeek: Int, startPeriod: Int, endPeriod: Int) -> Unit,
 ) {
@@ -33,7 +37,49 @@ fun AddCourseDialog(
     var startPeriod by remember { mutableStateOf(period.toString()) }
     var endPeriod by remember { mutableStateOf(period.toString()) }
     var weekTypeExpanded by remember { mutableStateOf(false) }
+    var showConflictWarning by remember { mutableStateOf(false) }
     val weekTypes = listOf("\u5168\u5468", "\u5355\u5468(\u5947\u6570\u5468)", "\u53cc\u5468(\u5076\u6570\u5468)")
+
+    val spVal = startPeriod.toIntOrNull()
+    val epVal = endPeriod.toIntOrNull()
+    val periodError = (spVal != null && (spVal < 1 || spVal > periodCount)) ||
+            (epVal != null && (epVal < 1 || epVal > periodCount)) ||
+            (spVal != null && epVal != null && spVal > epVal)
+
+    if (showConflictWarning) {
+        AlertDialog(
+            onDismissRequest = { showConflictWarning = false },
+            title = { Text("\u65f6\u95f4\u51b2\u7a81\u63d0\u793a") },
+            text = {
+                Column {
+                    Text("\u4ee5\u4e0b\u8bfe\u7a0b\u4e0e\u65b0\u589e\u8bfe\u7a0b\u65f6\u95f4\u91cd\u53e0:")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    conflicts.forEach { (courseName, period) ->
+                        Text(
+                            "  \u2022 $courseName (\u7b2c${period}\u8282)",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("\u662f\u5426\u7ee7\u7eed\u6dfb\u52a0?", fontSize = 13.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showConflictWarning = false
+                    if (!periodError) {
+                        onConfirm(name.trim(), teacher.trim(), room.trim(), weekTypeIndex,
+                            startWeek.toIntOrNull() ?: currentWeek, endWeek.toIntOrNull() ?: totalWeeks,
+                            startPeriod.toIntOrNull() ?: period, endPeriod.toIntOrNull() ?: period)
+                    }
+                }) { Text("\u7ee7\u7eed\u6dfb\u52a0") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConflictWarning = false }) { Text("\u53d6\u6d88") }
+            }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -89,22 +135,42 @@ fun AddCourseDialog(
                     OutlinedTextField(
                         value = startPeriod, onValueChange = { startPeriod = it.filter { c -> c.isDigit() } },
                         label = { Text("\u8d77\u8282") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.weight(1f)
+                        singleLine = true, modifier = Modifier.weight(1f),
+                        isError = spVal != null && (spVal < 1 || spVal > periodCount),
+                        supportingText = if (spVal != null && (spVal < 1 || spVal > periodCount)) {
+                            { Text("\u9650\u5236: 1~$periodCount\u8282", fontSize = 11.sp) }
+                        } else null
                     )
                     OutlinedTextField(
                         value = endPeriod, onValueChange = { endPeriod = it.filter { c -> c.isDigit() } },
                         label = { Text("\u6b63\u8282") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.weight(1f)
+                        singleLine = true, modifier = Modifier.weight(1f),
+                        isError = epVal != null && (epVal < 1 || epVal > periodCount),
+                        supportingText = if (epVal != null && (epVal < 1 || epVal > periodCount)) {
+                            { Text("\u9650\u5236: 1~$periodCount\u8282", fontSize = 11.sp) }
+                        } else null
+                    )
+                }
+                if (spVal != null && epVal != null && spVal > epVal) {
+                    Text(
+                        "\u8d77\u8282\u4e0d\u80fd\u5927\u4e8e\u6b63\u8282",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                    if (name.isBlank()) { nameError = true } else {
-                    onConfirm(name.trim(), teacher.trim(), room.trim(), weekTypeIndex,
-                        startWeek.toIntOrNull() ?: currentWeek, endWeek.toIntOrNull() ?: totalWeeks,
-                        startPeriod.toIntOrNull() ?: period, endPeriod.toIntOrNull() ?: period)
+                    if (name.isBlank()) { nameError = true } else if (periodError) { /* no-op, errors shown inline */ } else {
+                    if (conflicts.isEmpty()) {
+                        onConfirm(name.trim(), teacher.trim(), room.trim(), weekTypeIndex,
+                            startWeek.toIntOrNull() ?: currentWeek, endWeek.toIntOrNull() ?: totalWeeks,
+                            startPeriod.toIntOrNull() ?: period, endPeriod.toIntOrNull() ?: period)
+                    } else {
+                        showConflictWarning = true
+                    }
                 }
             }) { Text("\u786e\u5b9a") }
         },
@@ -125,12 +191,14 @@ fun EditCourseDialog(
     endWeek: Int,
     weekType: Int,
     totalWeeks: Int,
+    periodCount: Int = 12,
     onDismiss: () -> Unit,
     onConfirm: (name: String, teacher: String, room: String, dayOfWeek: Int, weekType: Int, startWeek: Int, endWeek: Int, startPeriod: Int, endPeriod: Int) -> Unit,
     onDelete: () -> Unit
 ) {
     val dayNames = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94")
     var name by remember { mutableStateOf(courseName) }
+    var nameError by remember { mutableStateOf(false) }
     var teacher by remember { mutableStateOf(courseTeacher) }
     var room by remember { mutableStateOf(courseRoom) }
     var weekTypeIndex by remember { mutableIntStateOf(weekType) }
@@ -141,6 +209,12 @@ fun EditCourseDialog(
     var weekTypeExpanded by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val weekTypes = listOf("\u5168\u5468", "\u5355\u5468(\u5947\u6570\u5468)", "\u53cc\u5468(\u5076\u6570\u5468)")
+
+    val spVal = sPeriod.toIntOrNull()
+    val epVal = ePeriod.toIntOrNull()
+    val periodError = (spVal != null && (spVal < 1 || spVal > periodCount)) ||
+            (epVal != null && (epVal < 1 || epVal > periodCount)) ||
+            (spVal != null && epVal != null && spVal > epVal)
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -167,9 +241,9 @@ fun EditCourseDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 OutlinedTextField(
-                    value = name, onValueChange = { name = it },
+                    value = name, onValueChange = { name = it; nameError = false },
                     label = { Text("\u8bfe\u7a0b\u540d\u79f0") },
-                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                    singleLine = true, isError = nameError, modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = teacher, onValueChange = { teacher = it },
@@ -210,19 +284,35 @@ fun EditCourseDialog(
                     OutlinedTextField(
                         value = sPeriod, onValueChange = { sPeriod = it.filter { c -> c.isDigit() } },
                         label = { Text("\u8d77\u8282") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.weight(1f)
+                        singleLine = true, modifier = Modifier.weight(1f),
+                        isError = spVal != null && (spVal < 1 || spVal > periodCount),
+                        supportingText = if (spVal != null && (spVal < 1 || spVal > periodCount)) {
+                            { Text("\u9650\u5236: 1~$periodCount\u8282", fontSize = 11.sp) }
+                        } else null
                     )
                     OutlinedTextField(
                         value = ePeriod, onValueChange = { ePeriod = it.filter { c -> c.isDigit() } },
                         label = { Text("\u6b63\u8282") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.weight(1f)
+                        singleLine = true, modifier = Modifier.weight(1f),
+                        isError = epVal != null && (epVal < 1 || epVal > periodCount),
+                        supportingText = if (epVal != null && (epVal < 1 || epVal > periodCount)) {
+                            { Text("\u9650\u5236: 1~$periodCount\u8282", fontSize = 11.sp) }
+                        } else null
+                    )
+                }
+                if (spVal != null && epVal != null && spVal > epVal) {
+                    Text(
+                        "\u8d77\u8282\u4e0d\u80fd\u5927\u4e8e\u6b63\u8282",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                if (name.isNotBlank()) {
+                if (name.isBlank()) { nameError = true } else if (!periodError) {
                     onConfirm(name.trim(), teacher.trim(), room.trim(), dayOfWeek, weekTypeIndex,
                         sWeek.toIntOrNull() ?: startWeek, eWeek.toIntOrNull() ?: endWeek,
                         sPeriod.toIntOrNull() ?: startPeriod, ePeriod.toIntOrNull() ?: endPeriod)

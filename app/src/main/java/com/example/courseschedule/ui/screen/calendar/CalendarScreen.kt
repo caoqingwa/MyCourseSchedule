@@ -248,6 +248,10 @@ fun CalendarScreen(
                             " \u8fd8\u6709 " + hoursLeftVal + "\u5c0f\u65f6 "
                         }
                         val courseName = state.courses.find { it.id == exam.courseId }?.name
+                        val dateFmt = remember { SimpleDateFormat("M\u6708d\u65e5", Locale.getDefault()) }
+                        val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+                        val dayOfWeekNames = remember { listOf("\u5468\u65e5", "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e94", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d") }
+                        val examCal = remember(exam.examDate) { Calendar.getInstance().apply { timeInMillis = exam.examDate } }
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceContainerLow,
                             shape = RoundedCornerShape(14.dp),
@@ -275,11 +279,8 @@ fun CalendarScreen(
                                     if (courseName != null && exam.notes != null) {
                                         Text(courseName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    val examCal = Calendar.getInstance().apply { timeInMillis = exam.examDate }
-                                    val dayOfWeekNames = listOf("\u5468\u65e5", "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e94", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d")
-                                    val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
                                     Text(
-                                        SimpleDateFormat("M\u6708d\u65e5", Locale.getDefault()).format(Date(exam.examDate)) +
+                                        dateFmt.format(Date(exam.examDate)) +
                                                 " " + timeFmt.format(Date(exam.examDate)) +
                                                 " \u00b7 " + dayOfWeekNames[examCal.get(Calendar.DAY_OF_WEEK) - 1],
                                         fontSize = 12.sp,

@@ -1,10 +1,12 @@
 package com.example.courseschedule.data.db.entity
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import org.json.JSONArray
 import org.json.JSONObject
 
+@Immutable
 @Entity(tableName = "semesters")
 data class Semester(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

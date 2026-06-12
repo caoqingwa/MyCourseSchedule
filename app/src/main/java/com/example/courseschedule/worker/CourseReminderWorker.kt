@@ -1,4 +1,4 @@
-﻿package com.example.courseschedule.worker
+package com.example.courseschedule.worker
 
 import android.content.Context
 import androidx.hilt.work.HiltWorker
@@ -23,13 +23,20 @@ class CourseReminderWorker @AssistedInject constructor(
     }
 
     companion object {
+        private const val UNIQUE_PREFIX = "course_reminder_"
+
         fun schedule(context: Context, courseName: String, roomName: String, period: String, delayMinutes: Long) {
             val data = workDataOf("course_name" to courseName, "room_name" to roomName, "period" to period)
             val request = OneTimeWorkRequestBuilder<CourseReminderWorker>()
                 .setInputData(data)
                 .setInitialDelay(delayMinutes, TimeUnit.MINUTES)
                 .build()
-            WorkManager.getInstance(context).enqueue(request)
+            val uniqueName = "$UNIQUE_PREFIX${courseName}_$period"
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                uniqueName,
+                ExistingWorkPolicy.REPLACE,
+                request
+            )
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.example.courseschedule.data.repository
 
+import androidx.room.Transaction
 import com.example.courseschedule.data.db.dao.*
 import com.example.courseschedule.data.db.entity.*
 import kotlinx.coroutines.flow.Flow
@@ -61,4 +62,20 @@ class CourseRepository @Inject constructor(
     suspend fun updateExam(exam: Exam) = examDao.update(exam)
     suspend fun deleteExam(exam: Exam) = examDao.delete(exam)
     suspend fun deleteExpiredExams() = examDao.deleteExpired(System.currentTimeMillis())
+
+    @Transaction
+    suspend fun deleteCourseWithSchedules(courseId: Long) {
+        scheduleDao.deleteByCourseId(courseId)
+        courseDao.getById(courseId)?.let { courseDao.delete(it) }
+    }
+
+    @Transaction
+    suspend fun insertCourseWithSchedule(
+        course: Course,
+        schedule: Schedule
+    ): Long {
+        val courseId = courseDao.insert(course)
+        scheduleDao.insert(schedule.copy(courseId = courseId))
+        return courseId
+    }
 }

@@ -1,6 +1,7 @@
 package com.example.courseschedule.ui.screen.today
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.courseschedule.data.db.entity.Course
@@ -10,11 +11,13 @@ import com.example.courseschedule.ui.component.CourseWithSchedule
 import com.example.courseschedule.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.*
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TodayViewModel @Inject constructor(
     private val repository: CourseRepository,
@@ -24,6 +27,7 @@ class TodayViewModel @Inject constructor(
     private val todayMillis = System.currentTimeMillis()
     val dayOfWeek = DateUtils.getDayOfWeek(todayMillis)
 
+    @Immutable
     data class TodayUiState(
         val semester: Semester? = null,
         val upcomingCourses: List<CourseWithSchedule> = emptyList(),
@@ -31,7 +35,8 @@ class TodayViewModel @Inject constructor(
         val currentPeriod: Int = 0,
         val totalRemaining: Int = 0,
         val isEmpty: Boolean = true,
-        val presets: List<Semester> = emptyList()
+        val presets: List<Semester> = emptyList(),
+        val maxScheduledPeriod: Int = 0
     )
 
     private fun getPeriodEndMillis(period: Int, semester: Semester): Long {
@@ -70,7 +75,15 @@ class TodayViewModel @Inject constructor(
         if (semester == null) {
             return@flatMapLatest flowOf(TodayUiState(presets = presets))
         }
-        repository.getSchedulesBySemester(semester.id).map { schedules ->
+        combine(
+            repository.getSchedulesBySemester(semester.id),
+            repository.getCoursesBySemester(semester.id),
+            repository.getAllRooms()
+        ) { schedules, courses, rooms ->
+            val courseMap = courses.associateBy { it.id }
+            val roomMap = rooms.associateBy({ it.id }, { it.name })
+            Triple(schedules, courseMap, roomMap)
+        }.map { (schedules, courseMap, roomMap) ->
             val currentWeek = DateUtils.getWeekNumber(todayMillis, semester.startDate)
             val activeSchedules = schedules.filter {
                 it.dayOfWeek == dayOfWeek && DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, currentWeek)
@@ -78,11 +91,6 @@ class TodayViewModel @Inject constructor(
 
             val now = System.currentTimeMillis()
             val currentPeriod = DateUtils.getCurrentPeriod(semester)
-
-            val allCourses = repository.getCoursesBySemester(semester.id).first()
-            val courseMap = allCourses.associateBy { it.id }
-            val allRooms = repository.getAllRooms().first()
-            val roomMap = allRooms.associateBy({ it.id }, { it.name })
 
             var current: CourseWithSchedule? = null
             val upcoming = mutableListOf<CourseWithSchedule>()
@@ -102,12 +110,15 @@ class TodayViewModel @Inject constructor(
                 }
             }
 
+            val maxPeriod = schedules.maxOfOrNull { it.endPeriod } ?: 0
+
             TodayUiState(
                 semester = semester, upcomingCourses = upcoming, currentCourse = current,
                 currentPeriod = currentPeriod,
                 totalRemaining = if (current != null) upcoming.size + 1 else upcoming.size,
                 isEmpty = activeSchedules.isEmpty(),
-                presets = presets
+                presets = presets,
+                maxScheduledPeriod = maxPeriod
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TodayUiState())

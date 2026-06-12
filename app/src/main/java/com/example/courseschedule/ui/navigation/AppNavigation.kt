@@ -1,4 +1,4 @@
-﻿package com.example.courseschedule.ui.navigation
+package com.example.courseschedule.ui.navigation
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -21,4 +21,5 @@ val bottomNavItems = listOf(Screen.Today, Screen.Week, Screen.Calendar)
 
 object NavigationState {
     var targetWeek by mutableIntStateOf(0)
+    var targetDayOfWeek by mutableIntStateOf(0)
 }

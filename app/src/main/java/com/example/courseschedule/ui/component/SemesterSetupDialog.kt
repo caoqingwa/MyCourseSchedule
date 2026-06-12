@@ -1,4 +1,4 @@
-﻿package com.example.courseschedule.ui.component
+package com.example.courseschedule.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -38,6 +38,7 @@ import java.util.*
 fun SemesterSetupDialog(
     semester: Semester?,
     savedPresets: List<Semester>,
+    maxScheduledPeriod: Int = 0,
     onDismiss: () -> Unit,
     onConfirm: (name: String, startDateMillis: Long, totalWeeks: Int, periodCount: Int, periodTimesJson: String) -> Unit,
     onLoadPreset: (Semester) -> Unit,
@@ -167,14 +168,37 @@ fun SemesterSetupDialog(
             }
 
             // Period count
+            var showBlockedHint by remember { mutableStateOf(false) }
             Text("\u6bcf\u5929\u8282\u6570", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            if (showBlockedHint && maxScheduledPeriod > 0) {
+                Text(
+                    "\u26a0 \u5df2\u6709\u8bfe\u7a0b\u6392\u5230\u7b2c${maxScheduledPeriod}\u8282\uff0c\u65e0\u6cd5\u51cf\u5c11\u5230\u66f4\u4f4e",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
             Slider(
                 value = periodCount.toFloat(),
-                onValueChange = { periodCount = it.roundToInt() },
+                onValueChange = {
+                    val v = it.roundToInt()
+                    if (maxScheduledPeriod > 0 && v < maxScheduledPeriod) {
+                        showBlockedHint = true
+                        periodCount = maxScheduledPeriod
+                    } else {
+                        showBlockedHint = false
+                        periodCount = v
+                    }
+                },
                 valueRange = 4f..16f,
                 steps = 11,
                 onValueChangeFinished = {
-                    if (periodTimes.size > periodCount) periodTimes = periodTimes.take(periodCount)
+                    val defaults = Semester.defaultPeriodTimes()
+                    periodTimes = if (periodTimes.size > periodCount) {
+                        periodTimes.take(periodCount)
+                    } else if (periodTimes.size < periodCount) {
+                        periodTimes + defaults.drop(periodTimes.size).take(periodCount - periodTimes.size)
+                    } else periodTimes
                 },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -189,9 +213,8 @@ fun SemesterSetupDialog(
             // doesn't push down the outer Column.
             Text("\u8bfe\u8282\u65f6\u95f4\u8bbe\u7f6e", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
 
-            val isEditing = editingPeriodIndex in 0 until periodCount
-            // Fixed height: list is 220dp always, editor is ~230dp when open
-            val sectionHeight = if (isEditing) 460.dp else 220.dp
+            val isEditing by remember { derivedStateOf { editingPeriodIndex in 0 until periodCount } }
+            val sectionHeight by remember { derivedStateOf { if (isEditing) 460.dp else 220.dp } }
 
             Box(
                 modifier = Modifier

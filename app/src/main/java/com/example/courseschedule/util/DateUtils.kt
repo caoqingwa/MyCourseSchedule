@@ -14,7 +14,7 @@ object DateUtils {
     }
 
     private fun toMonday(dateMillis: Long): Long {
-        val cal = Calendar.getInstance().apply {
+        val cal = Calendar.getInstance(Locale.US).apply {
             timeInMillis = dateMillis
             firstDayOfWeek = Calendar.MONDAY
             set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
@@ -33,7 +33,7 @@ object DateUtils {
     }
 
     fun getStartOfWeek(dateMillis: Long): Long {
-        val cal = Calendar.getInstance().apply {
+        val cal = Calendar.getInstance(Locale.US).apply {
             timeInMillis = dateMillis
             firstDayOfWeek = Calendar.MONDAY
             set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)

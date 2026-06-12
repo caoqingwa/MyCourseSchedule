@@ -2,7 +2,7 @@ package com.example.courseschedule.ui.component
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -28,8 +28,7 @@ fun BottomNavBar(
     screens: List<Screen>,
     modifier: Modifier = Modifier
 ) {
-    val colorAnimSpec = tween<androidx.compose.ui.graphics.Color>(durationMillis = 200)
-    val scaleAnimSpec = tween<Float>(durationMillis = 180)
+    val colorAnimSpec = spring<Float>(dampingRatio = 0.85f, stiffness = 400f)
     val interactionSource = remember { MutableInteractionSource() }
 
     Box(
@@ -50,19 +49,19 @@ fun BottomNavBar(
                 val selected = currentRoute?.startsWith(screen.baseRoute) == true
                 val scale by animateFloatAsState(
                     targetValue = if (selected) 1.08f else 1f,
-                    animationSpec = scaleAnimSpec,
+                    animationSpec = colorAnimSpec,
                     label = "tabScale"
                 )
                 val bgColor by animateColorAsState(
                     targetValue = if (selected) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.surfaceContainer,
-                    animationSpec = colorAnimSpec,
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f),
                     label = "bg"
                 )
                 val textColor by animateColorAsState(
                     targetValue = if (selected) MaterialTheme.colorScheme.onPrimary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
-                    animationSpec = colorAnimSpec,
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f),
                     label = "text"
                 )
                 Box(

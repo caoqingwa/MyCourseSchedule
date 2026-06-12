@@ -23,3 +23,8 @@ val CourseColors = listOf(
     Color(0xFFD4E157) to Color(0xFF1A3A00),
     Color(0xFFEF5350) to Color(0xFFFFFFFF)
 )
+
+fun getCourseColor(courseId: Long): Pair<Color, Color> {
+    val idx = (courseId % CourseColors.size).toInt()
+    return CourseColors[idx]
+}

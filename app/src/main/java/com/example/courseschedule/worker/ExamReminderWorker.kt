@@ -3,6 +3,7 @@ package com.example.courseschedule.worker
 import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
+import com.example.courseschedule.data.db.dao.ExamDao
 import com.example.courseschedule.util.NotificationHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -11,7 +12,8 @@ import java.util.concurrent.TimeUnit
 @HiltWorker
 class ExamReminderWorker @AssistedInject constructor(
     @Assisted context: Context,
-    @Assisted params: WorkerParameters
+    @Assisted params: WorkerParameters,
+    private val examDao: ExamDao
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
@@ -21,27 +23,15 @@ class ExamReminderWorker @AssistedInject constructor(
 
         if (hoursUntilExam <= 0) {
             if (examId >= 0) {
-                try {
-                    val db = androidx.room.Room.databaseBuilder(
-                        applicationContext,
-                        com.example.courseschedule.data.db.AppDatabase::class.java,
-                        "course_schedule_db"
-                    ).fallbackToDestructiveMigration().build()
-                    db.examDao().getById(examId)?.let { exam ->
-                        if (exam.examDate < System.currentTimeMillis()) {
-                            db.examDao().delete(exam)
-                        }
+                examDao.getById(examId)?.let { exam ->
+                    if (exam.examDate < System.currentTimeMillis()) {
+                        examDao.delete(exam)
                     }
-                    db.close()
-                } catch (_: Exception) {}
+                }
             }
             return Result.success()
         }
 
-        val hoursText = when {
-            hoursUntilExam >= 24 -> (hoursUntilExam / 24).toString() + "\u5929"
-            else -> hoursUntilExam.toString() + "\u5c0f\u65f6"
-        }
         NotificationHelper.showExamReminder(applicationContext, examName, hoursUntilExam)
         return Result.success()
     }
@@ -61,7 +51,11 @@ class ExamReminderWorker @AssistedInject constructor(
                 .setInputData(data)
                 .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
                 .build()
-            WorkManager.getInstance(context).enqueue(request)
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "exam_reminder_$examId",
+                ExistingWorkPolicy.REPLACE,
+                request
+            )
         }
     }
 }

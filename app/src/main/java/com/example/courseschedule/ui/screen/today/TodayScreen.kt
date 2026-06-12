@@ -5,8 +5,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +15,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.courseschedule.ui.component.CourseCard
+import com.example.courseschedule.ui.component.CourseScheduleTopBar
 import com.example.courseschedule.ui.component.SemesterSetupDialog
 import com.example.courseschedule.util.DateUtils
 import com.example.courseschedule.worker.CourseReminderWorker
@@ -35,38 +34,27 @@ fun TodayScreen(
     }
     var showSemesterDialog by remember { mutableStateOf(false) }
 
+    val scheduledCourses = remember { mutableSetOf<Long>() }
     LaunchedEffect(state.upcomingCourses) {
         state.upcomingCourses.forEach { cws ->
-            val roomName = cws.roomName ?: ""
-            val periodStr = "\u7b2c" + cws.schedule.startPeriod + "-" + cws.schedule.endPeriod + "\u8282"
-            CourseReminderWorker.schedule(viewModel.context, cws.course.name, roomName, periodStr, 5)
+            val key = cws.course.id * 1000 + cws.schedule.startPeriod
+            if (scheduledCourses.add(key)) {
+                val roomName = cws.roomName ?: ""
+                val periodStr = "\u7b2c" + cws.schedule.startPeriod + "-" + cws.schedule.endPeriod + "\u8282"
+                CourseReminderWorker.schedule(viewModel.context, cws.course.name, roomName, periodStr, 5)
+            }
         }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("\u8bfe\u7a0b\u8868", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    state.semester?.let { sem ->
-                        val wk = remember(state) { DateUtils.getWeekNumber(System.currentTimeMillis(), sem.startDate) }
-                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.small) {
-                            Text(
-                                "\u7b2c${wk}\u5468",
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
-                }
-            },
-            actions = {
-                IconButton(onClick = { showSemesterDialog = true }) {
-                    Icon(Icons.Default.Settings, contentDescription = "\u5b66\u671f\u8bbe\u7f6e")
-                }
-            }
+        val currentWeek = state.semester?.let { sem ->
+            DateUtils.getWeekNumber(System.currentTimeMillis(), sem.startDate)
+        } ?: 1
+
+        CourseScheduleTopBar(
+            selectedWeek = currentWeek,
+            currentWeek = currentWeek,
+            onSettingsClick = { showSemesterDialog = true }
         )
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -140,6 +128,7 @@ fun TodayScreen(
         SemesterSetupDialog(
             semester = state.semester,
             savedPresets = state.presets.filter { it.id != state.semester?.id },
+            maxScheduledPeriod = state.maxScheduledPeriod,
             onDismiss = { showSemesterDialog = false },
             onConfirm = { name, startDate, totalWeeks, periodCount, periodTimesJson ->
                 viewModel.saveSemester(name, startDate, totalWeeks, periodCount, periodTimesJson)

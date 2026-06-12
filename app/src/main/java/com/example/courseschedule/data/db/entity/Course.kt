@@ -1,9 +1,11 @@
-﻿package com.example.courseschedule.data.db.entity
+package com.example.courseschedule.data.db.entity
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
 
+@Immutable
 @Entity(
     tableName = "courses",
     foreignKeys = [ForeignKey(

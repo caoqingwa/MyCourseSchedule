@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -21,6 +22,7 @@ import com.example.courseschedule.data.db.entity.Schedule
 import com.example.courseschedule.ui.theme.CourseColors
 import com.example.courseschedule.util.DateUtils
 
+@Immutable
 data class CourseWithSchedule(val course: Course, val schedule: Schedule, val roomName: String? = null)
 
 @Composable

@@ -1,0 +1,17 @@
+@@ -35,1 +35,1 @@
+-@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
++@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+@@ -120,1 +120,1 @@
+-    ) { _ ->
++    ) { paddingValues ->
+@@ -122,1 +122,1 @@
+-        Column(modifier = Modifier.fillMaxSize()) {
++        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+@@ -172,1 +172,1 @@
+-            Box(
+-                modifier = Modifier
+-                    .fillMaxSize()
++            Box(
++                modifier = Modifier
++                    .weight(1f)
+

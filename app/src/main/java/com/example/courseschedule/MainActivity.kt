@@ -18,6 +18,7 @@ import com.example.courseschedule.ui.screen.today.TodayScreen
 import com.example.courseschedule.ui.screen.week.WeekScreen
 import com.example.courseschedule.ui.screen.calendar.CalendarScreen
 import com.example.courseschedule.ui.theme.CourseScheduleTheme
+import com.example.courseschedule.util.DateUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -62,14 +63,15 @@ fun MainApp() {
                 .padding(padding)
                 .fillMaxSize(),
             userScrollEnabled = true,
-            beyondViewportPageCount = 0
+            beyondViewportPageCount = 1
         ) { page ->
             when (page) {
                 0 -> TodayScreen(onCourseClick = { })
                 1 -> WeekScreen(onCourseClick = { })
                 2 -> CalendarScreen(
-                    onDayClick = { _, weekNumber ->
+                    onDayClick = { dayMillis, weekNumber ->
                         NavigationState.targetWeek = weekNumber
+                        NavigationState.targetDayOfWeek = DateUtils.getDayOfWeek(dayMillis)
                         coroutineScope.launch {
                             pagerState.animateScrollToPage(1)
                         }
