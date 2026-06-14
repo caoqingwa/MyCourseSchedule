@@ -4,12 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import com.example.courseschedule.ui.navigation.Screen
 import com.example.courseschedule.ui.navigation.bottomNavItems
 import com.example.courseschedule.ui.navigation.NavigationState
@@ -20,6 +23,7 @@ import com.example.courseschedule.ui.screen.calendar.CalendarScreen
 import com.example.courseschedule.ui.theme.CourseScheduleTheme
 import com.example.courseschedule.util.DateUtils
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -41,17 +45,49 @@ fun MainApp() {
     val coroutineScope = rememberCoroutineScope()
     val screens = bottomNavItems
 
+    val alpha = remember { Animatable(1f) }
+    val scale = remember { Animatable(1f) }
+    var transitioning by remember { mutableStateOf(false) }
+
+    val pageSpring = spring<Float>(
+        dampingRatio = 0.85f,
+        stiffness = Spring.StiffnessMediumLow
+    )
+
+    fun navigateTo(index: Int) {
+        val current = pagerState.currentPage
+        if (index == current || transitioning) return
+        coroutineScope.launch {
+            if (kotlin.math.abs(index - current) > 1) {
+                transitioning = true
+                // Phase 1: current page shrinks + fades out
+                coroutineScope {
+                    launch { alpha.animateTo(0f, pageSpring) }
+                    launch { scale.animateTo(0.92f, pageSpring) }
+                }
+                // Phase 2: instant jump
+                pagerState.scrollToPage(index)
+                // Phase 3: new page grows + fades in
+                alpha.snapTo(0f)
+                scale.snapTo(1.08f)
+                coroutineScope {
+                    launch { alpha.animateTo(1f, pageSpring) }
+                    launch { scale.animateTo(1f, pageSpring) }
+                }
+                transitioning = false
+            } else {
+                pagerState.animateScrollToPage(index)
+            }
+        }
+    }
+
     Scaffold(
         bottomBar = {
             BottomNavBar(
                 currentRoute = screens[pagerState.currentPage].route,
                 onNavigate = { screen ->
                     val targetIndex = screens.indexOf(screen)
-                    if (targetIndex >= 0) {
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(targetIndex)
-                        }
-                    }
+                    if (targetIndex >= 0) navigateTo(targetIndex)
                 },
                 screens = screens
             )
@@ -61,9 +97,14 @@ fun MainApp() {
             state = pagerState,
             modifier = Modifier
                 .padding(padding)
-                .fillMaxSize(),
-            userScrollEnabled = true,
-            beyondViewportPageCount = 1
+                .fillMaxSize()
+                .graphicsLayer {
+                    this.alpha = alpha.value
+                    scaleX = scale.value
+                    scaleY = scale.value
+                },
+            userScrollEnabled = !transitioning,
+            beyondViewportPageCount = 0
         ) { page ->
             when (page) {
                 0 -> TodayScreen(onCourseClick = { })
@@ -72,15 +113,9 @@ fun MainApp() {
                     onDayClick = { dayMillis, weekNumber ->
                         NavigationState.targetWeek = weekNumber
                         NavigationState.targetDayOfWeek = DateUtils.getDayOfWeek(dayMillis)
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(1)
-                        }
+                        navigateTo(1)
                     },
-                    onNavigateToToday = {
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(0)
-                        }
-                    }
+                    onNavigateToToday = { navigateTo(0) }
                 )
             }
         }

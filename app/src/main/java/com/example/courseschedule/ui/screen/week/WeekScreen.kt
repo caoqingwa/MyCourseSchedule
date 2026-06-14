@@ -261,6 +261,8 @@ private class WeekSwitcherState {
 
     private var animating = false
     private var pendingSwipes = 0
+    private var lastDragDelta = 0f
+    private var lastDragTime = 0L
     var lastTarget: Int? = null
         private set
 
@@ -315,12 +317,17 @@ private class WeekSwitcherState {
             -screenWidthPx * 0.5f, screenWidthPx * 0.5f
         )
         scope.launch { offset.snapTo(newTarget) }
+        lastDragDelta = delta
+        lastDragTime = System.nanoTime()
     }
 
     fun onDragEnd(screenWidthPx: Float, currentWeek: Int, totalWeeks: Int, scope: CoroutineScope): Boolean {
         val dThresh = screenWidthPx * 0.15f
-        val goRight = offset.value < -dThresh
-        val goLeft = offset.value > dThresh
+        val vThresh = 400f
+        val elapsed = ((System.nanoTime() - lastDragTime) / 1_000_000f).coerceAtLeast(1f)
+        val velocity = lastDragDelta / (elapsed / 1000f)
+        val goRight = offset.value < -dThresh || velocity < -vThresh
+        val goLeft = offset.value > dThresh || velocity > vThresh
         if (goRight || goLeft) {
             val delta = if (goRight) 1 else -1
             if (animating) {

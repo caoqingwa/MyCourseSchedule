@@ -28,7 +28,8 @@ fun BottomNavBar(
     screens: List<Screen>,
     modifier: Modifier = Modifier
 ) {
-    val colorAnimSpec = spring<Float>(dampingRatio = 0.85f, stiffness = 400f)
+    val floatAnimSpec = spring<Float>(dampingRatio = 0.85f, stiffness = 400f)
+    val colorAnimSpec = spring<androidx.compose.ui.graphics.Color>(dampingRatio = 0.85f, stiffness = 400f)
     val interactionSource = remember { MutableInteractionSource() }
 
     Box(
@@ -49,24 +50,25 @@ fun BottomNavBar(
                 val selected = currentRoute?.startsWith(screen.baseRoute) == true
                 val scale by animateFloatAsState(
                     targetValue = if (selected) 1.08f else 1f,
-                    animationSpec = colorAnimSpec,
+                    animationSpec = floatAnimSpec,
                     label = "tabScale"
                 )
                 val bgColor by animateColorAsState(
                     targetValue = if (selected) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.surfaceContainer,
-                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f),
+                    animationSpec = colorAnimSpec,
                     label = "bg"
                 )
                 val textColor by animateColorAsState(
                     targetValue = if (selected) MaterialTheme.colorScheme.onPrimary
                         else MaterialTheme.colorScheme.onSurfaceVariant,
-                    animationSpec = spring(dampingRatio = 0.85f, stiffness = 400f),
+                    animationSpec = colorAnimSpec,
                     label = "text"
                 )
                 Box(
                     modifier = Modifier
                         .weight(1f)
+                        .padding(horizontal = 2.dp)
                         .graphicsLayer {
                             scaleX = scale
                             scaleY = scale

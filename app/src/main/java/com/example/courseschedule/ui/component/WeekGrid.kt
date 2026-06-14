@@ -1,19 +1,24 @@
 package com.example.courseschedule.ui.component
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -109,9 +114,9 @@ fun WeekGrid(
             }
         }
 
-        // Grid body with fixed height
+        // Grid body: Canvas for grid lines + period labels + touch overlay + course blocks
         Box(modifier = Modifier.fillMaxWidth().height(gridBodyHeight)) {
-            // Layer 1: Period numbers + times
+            // Period labels (left column) — rendered first, under grid lines
             for (row in 0 until totalPeriods) {
                 val sTime = startTimes.getOrNull(row) ?: "??"
                 val eTime = endTimes.getOrNull(row) ?: "??"
@@ -119,8 +124,8 @@ fun WeekGrid(
                     modifier = Modifier
                         .offset(x = 0.dp, y = cellHeight * row)
                         .size(periodColWidth, cellHeight)
-                        .border(0.8.dp, borderColor, cellShape)
                         .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .border(0.8.dp, borderColor, cellShape)
                 ) {
                     Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("${row + 1}", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
@@ -130,29 +135,47 @@ fun WeekGrid(
                 }
             }
 
-            // Layer 2: Empty cells (background grid with touch)
-            for (row in 0 until totalPeriods) {
-                for (col in 0..4) {
-                    val x = periodColWidth + colWidthDp.dp * col
-                    val y = cellHeight * row
-                    if (!occupied[row][col]) {
-                        Box(
-                            modifier = Modifier
-                                .offset(x, y)
-                                .size(colWidthDp.dp, cellHeight)
-                                .border(0.8.dp, borderColor, cellShape)
-                                .clip(cellShape)
-                                .combinedClickable(
-                                    onClick = {},
-                                    onLongClick = { onCellLongClick(col + 1, row + 1) }
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {}
-                    }
+            // Draw grid lines in the course area only (right of period column)
+            Canvas(
+                modifier = Modifier
+                    .offset(x = periodColWidth, y = 0.dp)
+                    .size(colWidthDp.dp * 5, gridBodyHeight)
+            ) {
+                val cellW = colWidthDp.dp.toPx()
+                val cellH = cellHeight.toPx()
+                val lineColor = borderColor
+
+                // Vertical lines (between columns)
+                for (col in 0..5) {
+                    val x = cellW * col
+                    drawLine(lineColor, Offset(x, 0f), Offset(x, cellH * totalPeriods), strokeWidth = 1.5f)
+                }
+                // Horizontal lines
+                for (row in 0..totalPeriods) {
+                    val y = cellH * row
+                    drawLine(lineColor, Offset(0f, y), Offset(cellW * 5, y), strokeWidth = 1.5f)
                 }
             }
 
-            // Layer 3: Merged course blocks (on top)
+            // Touch overlay — handles empty cell long-press
+            Box(
+                modifier = Modifier
+                    .offset(x = periodColWidth, y = 0.dp)
+                    .size(colWidthDp.dp * 5, gridBodyHeight)
+                    .pointerInput(totalPeriods) {
+                        detectTapGestures(
+                            onLongPress = { offset ->
+                                val col = (offset.x / colWidthDp.dp.toPx()).toInt().coerceIn(0, 4)
+                                val row = (offset.y / cellHeight.toPx()).toInt().coerceIn(0, totalPeriods - 1)
+                                if (!occupied[row][col]) {
+                                    onCellLongClick(col + 1, row + 1)
+                                }
+                            }
+                        )
+                    }
+            )
+
+            // Course blocks
             for (col in 0..4) {
                 for (block in colBlocks[col]) {
                     val x = periodColWidth + colWidthDp.dp * col

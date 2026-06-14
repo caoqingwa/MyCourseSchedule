@@ -15,6 +15,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import androidx.lifecycle.viewModelScope
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
@@ -61,15 +62,16 @@ class WeekViewModel @Inject constructor(
     }
 
     private fun consumeNavigationState() {
-        val targetWeek = NavigationState.targetWeek
-        if (targetWeek > 0) {
-            _selectedWeek.value = targetWeek
-            NavigationState.targetWeek = 0
-        }
+        // Set highlight FIRST so combine sees it when _selectedWeek triggers
         val targetDay = NavigationState.targetDayOfWeek
         if (targetDay > 0) {
             _highlightDayOfWeek.value = targetDay
             NavigationState.targetDayOfWeek = 0
+        }
+        val targetWeek = NavigationState.targetWeek
+        if (targetWeek > 0) {
+            _selectedWeek.value = targetWeek
+            NavigationState.targetWeek = 0
         }
     }
 

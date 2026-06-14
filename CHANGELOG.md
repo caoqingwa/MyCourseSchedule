@@ -1,5 +1,34 @@
 # CourseSchedule 更新日志
 
+## v1.7 (2026-06-13)
+
+### 周课表性能优化
+- WeekGrid: 空格子 Box 替换为 Canvas 绘制网格线，组合数从 ~72 降至 ~12
+- WeekGrid: 空格子触摸用单一 pointerInput + 坐标计算替代 ~60 个 combinedClickable
+- WeekGrid: 课程区域网格线用 Canvas drawLine 一次性绘制
+- WeekGrid: 节次列 Box 加回 border 确保分隔线可见
+
+### 底部导航栏修复
+- BottomNavBar: 添加 padding(horizontal=2.dp) 防止选中 tab 放大后遮挡邻居
+- BottomNavBar: 分离 Float 和 Color 的 AnimationSpec 类型，修复编译错误
+
+### 页面切换优化
+- HorizontalPager: beyondViewportPageCount 1→0，避免同时渲染两个重页面
+- 跨页切换（1↔3）: 用 scrollToPage + scale/alpha crossfade 替代 animateScrollToPage，避免中间页闪烁
+- 相邻页切换（1↔2, 2↔3）: 保持 animateScrollToPage 正常滑动
+- 跨页动画: 当前页 scale 1.0→0.92 + alpha→0 瞬移新页 + scale 1.08→1.0 + alpha→1
+
+### 手势修复
+- WeekScreen: 恢复速度检测（lastDragDelta/lastDragTime），速度阈值 400px/s
+- WeekScreen: 速度 OR 距离任一满足即触发翻页
+
+### 日历高亮修复
+- WeekViewModel: consumeNavigationState 先设置 _highlightDayOfWeek 再设置 _selectedWeek，确保 combine 读到正确值
+- WeekViewModel: _highlightDayOfWeek 改为 MutableStateFlow<Int>，作为 combine 源 Flow
+- WeekScreen: LaunchedEffect(navTargetWeek, navTargetDay) 响应式消费 NavigationState
+
+---
+
 ## v1.6 (2026-06-12)
 
 ### 动画优化
