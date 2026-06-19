@@ -105,7 +105,7 @@ fun CalendarScreen(
         val hoursLeft = ((exam.examDate - System.currentTimeMillis()) / 3600_000L).toInt().coerceAtLeast(0)
         val daysLeft = (hoursLeft / 24)
         val examCal = Calendar.getInstance().apply { timeInMillis = exam.examDate }
-        val dayOfWeekNames = listOf("\u5468\u65e5", "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e94", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d")
+        val dayOfWeekNames = remember { listOf("\u5468\u65e5", "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e94", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d") }
         val dateFmt = remember { SimpleDateFormat("yyyy\u5e74M\u6708d\u65e5", Locale.getDefault()) }
         val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
         var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -235,7 +235,7 @@ fun CalendarScreen(
                     }
                 } else {
                     items(state.exams, key = { it.id }) { exam ->
-                        val hoursLeftVal = ((exam.examDate - System.currentTimeMillis()) / 3600_000L).toInt().coerceAtLeast(0)
+                        val hoursLeftVal = ((exam.examDate - state.todayMillis) / 3600_000L).toInt().coerceAtLeast(0)
                         val daysLeftVal = hoursLeftVal / 24
                         val badgeColor = when {
                             daysLeftVal <= 3 -> MaterialTheme.colorScheme.error

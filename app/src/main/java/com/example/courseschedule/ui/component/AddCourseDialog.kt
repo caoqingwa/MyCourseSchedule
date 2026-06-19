@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.courseschedule.util.DateUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,7 +27,7 @@ fun AddCourseDialog(
     onDismiss: () -> Unit,
     onConfirm: (name: String, teacher: String, room: String, weekType: Int, startWeek: Int, endWeek: Int, startPeriod: Int, endPeriod: Int) -> Unit,
 ) {
-    val dayNames = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94")
+    val dayNames = DateUtils.DAY_NAMES
     var name by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf(false) }
     var teacher by remember { mutableStateOf("") }
@@ -38,7 +39,7 @@ fun AddCourseDialog(
     var endPeriod by remember { mutableStateOf(period.toString()) }
     var weekTypeExpanded by remember { mutableStateOf(false) }
     var showConflictWarning by remember { mutableStateOf(false) }
-    val weekTypes = listOf("\u5168\u5468", "\u5355\u5468(\u5947\u6570\u5468)", "\u53cc\u5468(\u5076\u6570\u5468)")
+    val weekTypes = DateUtils.WEEK_TYPES
 
     val spVal = startPeriod.toIntOrNull()
     val epVal = endPeriod.toIntOrNull()
@@ -196,7 +197,7 @@ fun EditCourseDialog(
     onConfirm: (name: String, teacher: String, room: String, dayOfWeek: Int, weekType: Int, startWeek: Int, endWeek: Int, startPeriod: Int, endPeriod: Int) -> Unit,
     onDelete: () -> Unit
 ) {
-    val dayNames = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94")
+    val dayNames = DateUtils.DAY_NAMES
     var name by remember { mutableStateOf(courseName) }
     var nameError by remember { mutableStateOf(false) }
     var teacher by remember { mutableStateOf(courseTeacher) }
@@ -208,7 +209,7 @@ fun EditCourseDialog(
     var ePeriod by remember { mutableStateOf(endPeriod.toString()) }
     var weekTypeExpanded by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    val weekTypes = listOf("\u5168\u5468", "\u5355\u5468(\u5947\u6570\u5468)", "\u53cc\u5468(\u5076\u6570\u5468)")
+    val weekTypes = DateUtils.WEEK_TYPES
 
     val spVal = sPeriod.toIntOrNull()
     val epVal = ePeriod.toIntOrNull()

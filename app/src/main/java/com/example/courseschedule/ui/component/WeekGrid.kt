@@ -30,6 +30,8 @@ import com.example.courseschedule.data.db.entity.Schedule
 import com.example.courseschedule.data.db.entity.Semester
 import com.example.courseschedule.ui.theme.CourseColors
 
+private data class MergedBlock(val course: Course, val schedule: Schedule, val startPeriod: Int, val endPeriod: Int)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun WeekGrid(
@@ -56,7 +58,6 @@ fun WeekGrid(
     val startTimes = semester?.getStartTimes() ?: Semester.defaultPeriodTimes().map { it.start }
     val endTimes = semester?.getEndTimes() ?: Semester.defaultPeriodTimes().map { it.end }
 
-    data class MergedBlock(val course: Course, val schedule: Schedule, val startPeriod: Int, val endPeriod: Int)
     val schedulesKey = schedules.hashCode()
     val coursesKey = courses.keys.hashCode()
     val colBlocks = remember(schedulesKey, coursesKey, totalPeriods) { Array(5) { col ->

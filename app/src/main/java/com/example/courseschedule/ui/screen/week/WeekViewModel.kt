@@ -102,10 +102,14 @@ class WeekViewModel @Inject constructor(
         val courses = mutableMapOf<Long, Course>()
         active.forEach { s -> coursesMap[s.courseId]?.let { courses[s.courseId] = it } }
         val range = DateUtils.getWeekRange(semester.startDate, week)
-        val fmt = SimpleDateFormat("yyyy.MM.dd", Locale.getDefault())
-        val rangeStr = fmt.format(Date(range.first)) + " ~ " +
-            SimpleDateFormat("MM.dd", Locale.getDefault()).format(Date(range.second))
+        val rangeStr = FMT_FULL.format(Date(range.first)) + " ~ " +
+            FMT_SHORT.format(Date(range.second))
         return WeekPageData(schedules = active, courseMap = courses, roomMap = roomMap, weekRange = rangeStr)
+    }
+
+    companion object {
+        private val FMT_FULL = SimpleDateFormat("yyyy.MM.dd", Locale.getDefault())
+        private val FMT_SHORT = SimpleDateFormat("MM.dd", Locale.getDefault())
     }
 
     val uiState: StateFlow<WeekUiState> = repository.getCurrentSemester()

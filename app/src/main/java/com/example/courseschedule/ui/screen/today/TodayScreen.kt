@@ -88,6 +88,14 @@ fun TodayScreen(
                 }
             }
         } else {
+            val nextInfoList = remember(state.upcomingCourses) {
+                state.upcomingCourses.mapIndexed { idx, item ->
+                    if (idx < state.upcomingCourses.lastIndex) {
+                        val next = state.upcomingCourses[idx + 1]
+                        "\u4e0b\u4e00\u8282\uff1a" + next.course.name + " " + next.schedule.startPeriod + "-" + next.schedule.endPeriod + "\u8282"
+                    } else null
+                }
+            }
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -102,7 +110,7 @@ fun TodayScreen(
                 }
                 state.currentCourse?.let { cws ->
                     item(key = "current") {
-                        val nxt = remember(state) {
+                        val nxt = remember(state.upcomingCourses) {
                             state.upcomingCourses.firstOrNull()?.let {
                                 "\u4e0b\u4e00\u8282\uff1a" + it.course.name + " " + it.schedule.startPeriod + "-" + it.schedule.endPeriod + "\u8282"
                             }
@@ -114,11 +122,7 @@ fun TodayScreen(
                     items = state.upcomingCourses,
                     key = { _, item -> item.course.id * 1000 + item.schedule.startPeriod }
                 ) { idx, item ->
-                    val nxt = if (idx < state.upcomingCourses.lastIndex) {
-                        val next = state.upcomingCourses[idx + 1]
-                        "\u4e0b\u4e00\u8282\uff1a" + next.course.name + " " + next.schedule.startPeriod + "-" + next.schedule.endPeriod + "\u8282"
-                    } else null
-                    CourseCard(item, isCurrent = false, nextInfo = nxt, onClick = { onCourseClick(item.course.id) })
+                    CourseCard(item, isCurrent = false, nextInfo = nextInfoList[idx], onClick = { onCourseClick(item.course.id) })
                 }
             }
         }

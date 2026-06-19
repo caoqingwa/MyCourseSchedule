@@ -213,8 +213,8 @@ fun SemesterSetupDialog(
             // doesn't push down the outer Column.
             Text("\u8bfe\u8282\u65f6\u95f4\u8bbe\u7f6e", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
 
-            val isEditing by remember { derivedStateOf { editingPeriodIndex in 0 until periodCount } }
-            val sectionHeight by remember { derivedStateOf { if (isEditing) 460.dp else 220.dp } }
+            val isEditing = editingPeriodIndex in 0 until periodCount
+            val sectionHeight = if (isEditing) 460.dp else 220.dp
 
             Box(
                 modifier = Modifier
