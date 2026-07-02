@@ -194,6 +194,7 @@ fun WeekScreen(
             dayOfWeek = longPressDay, period = longPressPeriod,
             currentWeek = state.selectedWeek, totalWeeks = state.totalWeeks,
             periodCount = state.semester?.periodCount ?: 12,
+            weekDays = state.semester?.weekDays ?: 5,
             conflicts = addDialogConflicts,
             onDismiss = { showAddDialog = false },
             onConfirm = { name, teacher, room, weekType, startWeek, endWeek, startPeriod, endPeriod ->
@@ -220,6 +221,7 @@ fun WeekScreen(
             weekType = sched.weekType,
             totalWeeks = state.totalWeeks,
             periodCount = state.semester?.periodCount ?: 12,
+            weekDays = state.semester?.weekDays ?: 5,
             onDismiss = { showEditDialog = false; editCourse = null; editSchedule = null },
             onConfirm = { name, teacher, room, dayOfWeek, weekType, startWeek, endWeek, startPeriod, endPeriod ->
                 viewModel.updateCourseAndSchedule(
@@ -240,9 +242,10 @@ fun WeekScreen(
             semester = state.semester,
             savedPresets = state.presets.filter { it.id != state.semester?.id },
             maxScheduledPeriod = state.maxScheduledPeriod,
+            hasWeekendCourses = state.hasWeekendCourses,
             onDismiss = { showSemesterDialog = false },
-            onConfirm = { name, startDate, totalWeeks, periodCount, periodTimesJson ->
-                viewModel.saveSemester(name, startDate, totalWeeks, periodCount, periodTimesJson)
+            onConfirm = { name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson ->
+                viewModel.saveSemester(name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson)
                 showSemesterDialog = false
             },
             onLoadPreset = { },

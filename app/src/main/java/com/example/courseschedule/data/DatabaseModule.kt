@@ -18,7 +18,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase {
         return Room.databaseBuilder(context, AppDatabase::class.java, "course_schedule.db")
-            .addMigrations(AppDatabase.MIGRATION_2_3)
+            .addMigrations(AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
             .build()
     }
     @Provides fun provideSemesterDao(db: AppDatabase): SemesterDao = db.semesterDao()

@@ -1,4 +1,4 @@
-﻿package com.example.courseschedule.data.db.dao
+package com.example.courseschedule.data.db.dao
 
 import androidx.room.*
 import com.example.courseschedule.data.db.entity.Schedule
@@ -26,4 +26,7 @@ interface ScheduleDao {
 
     @Query("DELETE FROM schedules WHERE courseId = :courseId")
     suspend fun deleteByCourseId(courseId: Long)
+
+    @Query("SELECT COUNT(*) FROM schedules WHERE dayOfWeek > 5 AND courseId IN (SELECT id FROM courses WHERE semesterId = :semesterId)")
+    suspend fun countWeekendSchedules(semesterId: Long): Int
 }

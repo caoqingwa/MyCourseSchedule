@@ -133,9 +133,10 @@ fun TodayScreen(
             semester = state.semester,
             savedPresets = state.presets.filter { it.id != state.semester?.id },
             maxScheduledPeriod = state.maxScheduledPeriod,
+            hasWeekendCourses = state.hasWeekendCourses,
             onDismiss = { showSemesterDialog = false },
-            onConfirm = { name, startDate, totalWeeks, periodCount, periodTimesJson ->
-                viewModel.saveSemester(name, startDate, totalWeeks, periodCount, periodTimesJson)
+            onConfirm = { name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson ->
+                viewModel.saveSemester(name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson)
                 showSemesterDialog = false
             },
             onLoadPreset = { },

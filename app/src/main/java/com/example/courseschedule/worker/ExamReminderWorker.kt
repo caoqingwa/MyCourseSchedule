@@ -57,5 +57,13 @@ class ExamReminderWorker @AssistedInject constructor(
                 request
             )
         }
+
+        suspend fun rescheduleAll(context: Context, examDao: ExamDao) {
+            val exams = examDao.getAllPending(System.currentTimeMillis())
+            for (exam in exams) {
+                val courseName = exam.notes ?: "\u8003\u8bd5"
+                schedule(context, courseName, exam.examDate, exam.reminderHours, exam.id)
+            }
+        }
     }
 }

@@ -14,6 +14,7 @@ data class Semester(
     val startDate: Long,
     val totalWeeks: Int,
     val periodCount: Int = 12,
+    val weekDays: Int = 5,
     val periodTimesJson: String = DEFAULT_PERIOD_TIMES_JSON
 ) {
     data class PeriodTime(val start: String, val end: String)

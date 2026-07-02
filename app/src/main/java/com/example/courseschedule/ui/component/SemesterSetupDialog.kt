@@ -39,8 +39,9 @@ fun SemesterSetupDialog(
     semester: Semester?,
     savedPresets: List<Semester>,
     maxScheduledPeriod: Int = 0,
+    hasWeekendCourses: Boolean = false,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, startDateMillis: Long, totalWeeks: Int, periodCount: Int, periodTimesJson: String) -> Unit,
+    onConfirm: (name: String, startDateMillis: Long, totalWeeks: Int, periodCount: Int, weekDays: Int, periodTimesJson: String) -> Unit,
     onLoadPreset: (Semester) -> Unit,
     onDeletePreset: (Semester) -> Unit
 ) {
@@ -55,6 +56,7 @@ fun SemesterSetupDialog(
     var selectedDay by remember { mutableIntStateOf(cal.get(Calendar.DAY_OF_MONTH)) }
     var totalWeeks by remember { mutableIntStateOf(semester?.totalWeeks ?: 20) }
     var periodCount by remember { mutableIntStateOf(semester?.periodCount ?: 12) }
+    var weekDays by remember { mutableIntStateOf(semester?.weekDays ?: 5) }
     var periodTimes by remember {
         mutableStateOf(semester?.getPeriodTimes() ?: Semester.defaultPeriodTimes())
     }
@@ -167,6 +169,36 @@ fun SemesterSetupDialog(
                 TextButton(onClick = { if (totalWeeks < 30) totalWeeks++ }) { Text("+", fontSize = 20.sp) }
             }
 
+            // Week days (5 or 7)
+            Text("\u6bcf\u5468\u8bfe\u8868\u5929\u6570", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            val canSwitchToFive = !hasWeekendCourses
+            if (hasWeekendCourses && weekDays == 7) {
+                Text(
+                    "\u26a0 \u5468\u672b\u5df2\u6709\u8bfe\u7a0b\uff0c\u65e0\u6cd5\u5207\u6362\u52305\u5929\u5236",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = weekDays == 5,
+                    onClick = { if (canSwitchToFive) weekDays = 5 },
+                    enabled = canSwitchToFive,
+                    label = { Text("5\u5929 (\u5468\u4e00\u2013\u5468\u4e94)", fontSize = 13.sp) },
+                    modifier = Modifier.weight(1f)
+                )
+                FilterChip(
+                    selected = weekDays == 7,
+                    onClick = { weekDays = 7 },
+                    label = { Text("7\u5929 (\u5468\u4e00\u2013\u5468\u65e5)", fontSize = 13.sp) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
             // Period count
             var showBlockedHint by remember { mutableStateOf(false) }
             Text("\u6bcf\u5929\u8282\u6570", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -199,8 +231,7 @@ fun SemesterSetupDialog(
                     } else if (periodTimes.size < periodCount) {
                         periodTimes + defaults.drop(periodTimes.size).take(periodCount - periodTimes.size)
                     } else periodTimes
-                },
-                modifier = Modifier.fillMaxWidth()
+                }
             )
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("4\u8282", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -358,7 +389,7 @@ fun SemesterSetupDialog(
                                 set(Calendar.MILLISECOND, 0)
                             }
                             val json = Semester.buildPeriodTimesJson(periodTimes.take(periodCount))
-                            onConfirm(name.trim(), dateCal.timeInMillis, totalWeeks, periodCount, json)
+                            onConfirm(name.trim(), dateCal.timeInMillis, totalWeeks, periodCount, weekDays, json)
                         }
                     },
                     modifier = Modifier.weight(1f)

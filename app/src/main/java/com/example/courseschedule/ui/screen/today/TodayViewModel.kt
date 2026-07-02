@@ -36,7 +36,8 @@ class TodayViewModel @Inject constructor(
         val totalRemaining: Int = 0,
         val isEmpty: Boolean = true,
         val presets: List<Semester> = emptyList(),
-        val maxScheduledPeriod: Int = 0
+        val maxScheduledPeriod: Int = 0,
+        val hasWeekendCourses: Boolean = false
     )
 
     private fun getPeriodEndMillis(period: Int, semester: Semester): Long {
@@ -111,6 +112,7 @@ class TodayViewModel @Inject constructor(
             }
 
             val maxPeriod = schedules.maxOfOrNull { it.endPeriod } ?: 0
+            val hasWeekend = schedules.any { it.dayOfWeek > 5 }
 
             TodayUiState(
                 semester = semester, upcomingCourses = upcoming, currentCourse = current,
@@ -118,25 +120,15 @@ class TodayViewModel @Inject constructor(
                 totalRemaining = if (current != null) upcoming.size + 1 else upcoming.size,
                 isEmpty = activeSchedules.isEmpty(),
                 presets = presets,
-                maxScheduledPeriod = maxPeriod
+                maxScheduledPeriod = maxPeriod,
+                hasWeekendCourses = hasWeekend
             )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TodayUiState())
 
-    fun saveSemester(name: String, startDateMillis: Long, totalWeeks: Int, periodCount: Int, periodTimesJson: String) {
+    fun saveSemester(name: String, startDateMillis: Long, totalWeeks: Int, periodCount: Int, weekDays: Int, periodTimesJson: String) {
         viewModelScope.launch {
-            val current = repository.getCurrentSemester().first()
-            if (current != null) {
-                repository.updateSemester(current.copy(
-                    name = name, startDate = startDateMillis, totalWeeks = totalWeeks,
-                    periodCount = periodCount, periodTimesJson = periodTimesJson
-                ))
-            } else {
-                repository.insertSemester(Semester(
-                    name = name, startDate = startDateMillis, totalWeeks = totalWeeks,
-                    periodCount = periodCount, periodTimesJson = periodTimesJson
-                ))
-            }
+            repository.saveSemesterCurrent(name, startDateMillis, totalWeeks, periodCount, weekDays, periodTimesJson)
         }
     }
 

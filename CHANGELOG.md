@@ -1,5 +1,67 @@
 # CourseSchedule 更新日志
 
+## v2.1 (2026-06-19)
+
+### 防止误触外层滚动
+- SemesterSetupDialog: 移除 ScrollNumberPicker 的 nestedScroll，消除与 ModalBottomSheet 的滚动冲突导致的抽搐
+- SemesterSetupDialog: Column 保留 verticalScroll，选择器区域滑动时页面会微微跟随，但滚动流畅无抖动
+
+### 周末课程防误切
+- SemesterSetupDialog: 当周六/日有课程时，5天制 FilterChip 禁用并显示红色警告提示
+- WeekViewModel/TodayViewModel: 新增 hasWeekendCourses 状态，基于 schedules 的 dayOfWeek>5 判断
+- ScheduleDao: 新增 countWeekendSchedules 查询（备用）
+- WeekUiState/TodayUiState: 新增 hasWeekendCourses 字段
+
+### 编辑课程数据不刷新修复
+- WeekGrid: coursesKey 从 courses.keys.hashCode() 改为 courses.hashCode()，确保课程名/教师等字段变更后网格重新渲染
+
+### 消息提示模式
+- NotificationHelper: 添加 PendingIntent，点击考试通知可直接打开 App
+- NotificationHelper: 添加运行时权限检查，Android 13+ 自动检测 POST_NOTIFICATIONS 权限
+- NotificationHelper: 考试通知添加 BigTextStyle，显示完整提醒内容
+- CalendarScreen: 顶部栏添加通知开关图标（铃铛），可一键开启/关闭考试提醒
+- CalendarScreen: 考试列表标题旁显示当前提醒状态标签（已开启/已关闭）
+- CalendarViewModel: 注入 ApplicationContext，管理通知开关状态
+- CalendarViewModel: addExam/updateExam 自动根据开关状态调度/取消 WorkManager 任务
+- CalendarViewModel: setNotificationsEnabled 开启时自动重新调度所有未过期考试提醒
+- ExamReminderWorker: rescheduleAll 改为 suspend 函数，启动时重新注册所有考试通知
+- CourseScheduleApp: 启动时调用 rescheduleAll 恢复所有考试提醒
+- CourseScheduleApp: 移除未使用的 daily_summary 通知渠道
+- ExamDao: 新增 getAllPending 查询未来考试
+- Android 13+: 通知开关点击时自动请求 POST_NOTIFICATIONS 运行时权限
+
+---
+
+## v2.0 (2026-06-19)
+
+### 5/7天每周课表切换
+- Semester 实体新增 weekDays 字段（默认5天），支持5天制（周一至周五）或7天制（周一至周日）
+- Room 数据库升级 v3→v4，ALTER TABLE 添加 weekDays 列
+- WeekGrid 支持动态列数：根据 semester.weekDays 渲染5列或7列
+- WeekGrid 网格线、触摸区域、课程色块全部适配动态列数
+- SemesterSetupDialog 新增"每周课表天数"切换（FilterChip: 5天/7天）
+- DateUtils 新增 DAY_NAMES_7 常量（周一至周日）
+- AddCourseDialog/EditCourseDialog 新增 weekDays 参数，星期下拉菜单支持7天
+- WeekViewModel/TodayViewModel saveSemester 签名更新，透传 weekDays
+- CourseRepository.saveSemesterCurrent 签名更新，支持 weekDays
+
+---
+
+## v1.8 (2026-06-19)
+
+### 安装修复
+- build.gradle.kts: 添加显式 debug 签名配置，修复直接安装 APK 时 -15 (INSTALL_FAILED_VERIFICATION_FAILURE) 错误
+- release 构建类型也使用 debug 签名配置
+
+### 代码质量修复
+- CourseRepository: 提取 saveSemesterCurrent() 方法，消除 WeekViewModel/TodayViewModel 中 saveSemester 的重复逻辑
+- AddExamDialog: courses[selectedCourseIndex] 添加 getOrNull 和 coerceIn 防止 IndexOutOfBoundsException
+- AddCourseDialog: startWeek/endWeek 提交时 coerceAtLeast(1)，防止输入 "0" 导致 week-0 课程持久化到数据库
+- EditCourseDialog: 同上，startWeek/endWeek coerceAtLeast(1) 校验
+- WeekViewModel: 移除重复的 viewModelScope import
+
+---
+
 ## v1.7 (2026-06-13)
 
 ### 周课表性能优化

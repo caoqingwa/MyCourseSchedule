@@ -9,7 +9,7 @@ import com.example.courseschedule.data.db.entity.*
 
 @Database(
     entities = [Semester::class, Course::class, Schedule::class, Room::class, Exam::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -38,6 +38,12 @@ abstract class AppDatabase : RoomDatabase() {
                 """)
                 db.execSQL("DROP TABLE exams")
                 db.execSQL("ALTER TABLE exams_new RENAME TO exams")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE semesters ADD COLUMN weekDays INTEGER NOT NULL DEFAULT 5")
             }
         }
     }

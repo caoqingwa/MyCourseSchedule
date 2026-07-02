@@ -1,5 +1,9 @@
 package com.example.courseschedule.ui.screen.calendar
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
@@ -57,6 +63,15 @@ fun CalendarScreen(
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
 
+    // Notification permission launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.setNotificationsEnabled(true)
+        }
+    }
+
     // Add exam dialog
     if (showAddExamDialog) {
         AddExamDialog(
@@ -65,8 +80,7 @@ fun CalendarScreen(
             onDismiss = { showAddExamDialog = false },
             onConfirm = { courseId, examDate, reminderHours, notes ->
                 scope.launch {
-                    val examId = viewModel.addExam(courseId, examDate, reminderHours, notes)
-                    ExamReminderWorker.schedule(context, notes ?: "\u8003\u8bd5", examDate, reminderHours, examId)
+                    viewModel.addExam(courseId, examDate, reminderHours, notes)
                 }
                 showAddExamDialog = false
             }
@@ -105,7 +119,7 @@ fun CalendarScreen(
         val hoursLeft = ((exam.examDate - System.currentTimeMillis()) / 3600_000L).toInt().coerceAtLeast(0)
         val daysLeft = (hoursLeft / 24)
         val examCal = Calendar.getInstance().apply { timeInMillis = exam.examDate }
-        val dayOfWeekNames = remember { listOf("\u5468\u65e5", "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e94", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d") }
+        val dayOfWeekNames = remember { listOf("\u5468\u65e5", "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d") }
         val dateFmt = remember { SimpleDateFormat("yyyy\u5e74M\u6708d\u65e5", Locale.getDefault()) }
         val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
         var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -177,9 +191,31 @@ fun CalendarScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            TopAppBar(title = {
-                Text("\u8bfe\u7a0b\u8868", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-            })
+            TopAppBar(
+                title = {
+                    Text("\u8bfe\u7a0b\u8868", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                },
+                actions = {
+                    // Notification toggle
+                    IconButton(onClick = {
+                        if (state.notificationsEnabled) {
+                            viewModel.setNotificationsEnabled(false)
+                        } else {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                viewModel.setNotificationsEnabled(true)
+                            }
+                        }
+                    }) {
+                        Icon(
+                            if (state.notificationsEnabled) Icons.Default.Notifications else Icons.Default.NotificationsOff,
+                            contentDescription = if (state.notificationsEnabled) "\u5173\u95ed\u63d0\u9192" else "\u5f00\u542f\u63d0\u9192",
+                            tint = if (state.notificationsEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            )
 
             LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                 item {
@@ -210,12 +246,40 @@ fun CalendarScreen(
 
                 item {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        "\u8003\u8bd5\u5b89\u6392",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "\u8003\u8bd5\u5b89\u6392",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (state.notificationsEnabled) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    " \u63d0\u9192\u5df2\u5f00\u542f ",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        } else {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    " \u63d0\u9192\u5df2\u5173\u95ed ",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
                 }
 
                 if (state.exams.isEmpty()) {
@@ -250,7 +314,7 @@ fun CalendarScreen(
                         val courseName = state.courses.find { it.id == exam.courseId }?.name
                         val dateFmt = remember { SimpleDateFormat("M\u6708d\u65e5", Locale.getDefault()) }
                         val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-                        val dayOfWeekNames = remember { listOf("\u5468\u65e5", "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e94", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d") }
+                        val dayOfWeekNames = remember { listOf("\u5468\u65e5", "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d") }
                         val examCal = remember(exam.examDate) { Calendar.getInstance().apply { timeInMillis = exam.examDate } }
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceContainerLow,

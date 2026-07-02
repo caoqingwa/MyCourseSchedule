@@ -15,7 +15,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import androidx.lifecycle.viewModelScope
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
@@ -44,7 +43,8 @@ class WeekViewModel @Inject constructor(
         val totalWeeks: Int = 20,
         val currentPage: WeekPageData = WeekPageData(),
         val presets: List<Semester> = emptyList(),
-        val maxScheduledPeriod: Int = 0
+        val maxScheduledPeriod: Int = 0,
+        val hasWeekendCourses: Boolean = false
     )
 
     @Immutable
@@ -132,6 +132,7 @@ class WeekViewModel @Inject constructor(
                         .coerceIn(1, semester.totalWeeks)
                     val currentPage = buildWeekPage(schedules, courseMap, roomMap, semester, displayWeek)
                     val maxPeriod = schedules.maxOfOrNull { it.endPeriod } ?: 0
+                    val hasWeekend = schedules.any { it.dayOfWeek > 5 }
                     WeekUiState(
                         semester = semester,
                         currentWeek = currentWeek,
@@ -141,28 +142,19 @@ class WeekViewModel @Inject constructor(
                         totalWeeks = semester.totalWeeks,
                         currentPage = currentPage,
                         presets = presets,
-                        maxScheduledPeriod = maxPeriod
+                        maxScheduledPeriod = maxPeriod,
+                        hasWeekendCourses = hasWeekend
                     )
                 }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WeekUiState())
 
-    fun saveSemester(name: String, startDateMillis: Long, totalWeeks: Int, periodCount: Int, periodTimesJson: String) {
+    fun saveSemester(name: String, startDateMillis: Long, totalWeeks: Int, periodCount: Int, weekDays: Int, periodTimesJson: String) {
         viewModelScope.launch {
-            val current = repository.getCurrentSemester().first()
-            if (current != null) {
-                repository.updateSemester(current.copy(
-                    name = name, startDate = startDateMillis, totalWeeks = totalWeeks,
-                    periodCount = periodCount, periodTimesJson = periodTimesJson
-                ))
-            } else {
-                repository.insertSemester(Semester(
-                    name = name, startDate = startDateMillis, totalWeeks = totalWeeks,
-                    periodCount = periodCount, periodTimesJson = periodTimesJson
-                ))
-                _selectedWeek.value = 0
-            }
+            val isNew = repository.getCurrentSemester().first() == null
+            repository.saveSemesterCurrent(name, startDateMillis, totalWeeks, periodCount, weekDays, periodTimesJson)
+            if (isNew) _selectedWeek.value = 0
         }
     }
 

@@ -14,13 +14,26 @@ android {
         applicationId = "com.example.courseschedule"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.7"
+        versionCode = 10
+        versionName = "2.1"
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file(System.getProperty("user.home") + File.separator + ".android" + File.separator + "debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

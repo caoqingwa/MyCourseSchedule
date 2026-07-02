@@ -24,6 +24,24 @@ class CourseRepository @Inject constructor(
     suspend fun updateSemester(semester: Semester) = semesterDao.update(semester)
     suspend fun deleteSemester(semester: Semester) = semesterDao.delete(semester)
 
+    suspend fun saveSemesterCurrent(
+        name: String, startDateMillis: Long, totalWeeks: Int,
+        periodCount: Int, weekDays: Int, periodTimesJson: String
+    ) {
+        val current = getCurrentSemester().first()
+        if (current != null) {
+            updateSemester(current.copy(
+                name = name, startDate = startDateMillis, totalWeeks = totalWeeks,
+                periodCount = periodCount, weekDays = weekDays, periodTimesJson = periodTimesJson
+            ))
+        } else {
+            insertSemester(Semester(
+                name = name, startDate = startDateMillis, totalWeeks = totalWeeks,
+                periodCount = periodCount, weekDays = weekDays, periodTimesJson = periodTimesJson
+            ))
+        }
+    }
+
     suspend fun initDefaultSemester(): Long? {
         val existing = semesterDao.getAll().first()
         if (existing.isNotEmpty()) return existing.first().id
@@ -50,6 +68,8 @@ class CourseRepository @Inject constructor(
     suspend fun deleteSchedule(schedule: Schedule) = scheduleDao.delete(schedule)
     suspend fun deleteSchedulesByCourseId(courseId: Long) = scheduleDao.deleteByCourseId(courseId)
 
+    suspend fun hasWeekendCourses(semesterId: Long): Boolean = scheduleDao.countWeekendSchedules(semesterId) > 0
+
     suspend fun insertRoom(room: Room): Long = roomDao.insert(room)
     fun getAllRooms(): Flow<List<Room>> = roomDao.getAll()
     suspend fun getRoomById(id: Long): Room? = roomDao.getById(id)
@@ -58,6 +78,7 @@ class CourseRepository @Inject constructor(
     }
 
     fun getExamsBySemester(semesterId: Long): Flow<List<Exam>> = examDao.getBySemester(semesterId)
+    fun getExamDao(): ExamDao = examDao
     suspend fun insertExam(exam: Exam): Long = examDao.insert(exam)
     suspend fun updateExam(exam: Exam) = examDao.update(exam)
     suspend fun deleteExam(exam: Exam) = examDao.delete(exam)

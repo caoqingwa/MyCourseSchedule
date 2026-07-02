@@ -41,11 +41,15 @@ fun AddExamDialog(
 ) {
     val isEditing = editingExam != null
 
-    val initialCourseIndex = if (isEditing) {
-        courses.indexOfFirst { it.id == editingExam!!.courseId }.coerceAtLeast(0)
+    val initialCourseIndex = if (isEditing && courses.isNotEmpty()) {
+        courses.indexOfFirst { it.id == editingExam!!.courseId }.coerceIn(0, courses.lastIndex)
     } else 0
 
     var selectedCourseIndex by remember { mutableIntStateOf(initialCourseIndex) }
+    // Keep index in bounds if courses list shrinks
+    if (courses.isNotEmpty() && selectedCourseIndex >= courses.size) {
+        selectedCourseIndex = courses.lastIndex
+    }
 
     val initCal = Calendar.getInstance().apply {
         timeInMillis = editingExam?.examDate ?: initialDateMillis
@@ -108,7 +112,7 @@ fun AddExamDialog(
                         onExpandedChange = { courseExpanded = it }
                     ) {
                         OutlinedTextField(
-                            value = courses[selectedCourseIndex].name,
+                            value = courses.getOrNull(selectedCourseIndex)?.name ?: "",
                             onValueChange = {},
                             readOnly = true,
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = courseExpanded) },
@@ -176,16 +180,15 @@ fun AddExamDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (courses.isNotEmpty()) {
-                        onConfirm(
-                            courses[selectedCourseIndex].id,
-                            buildDateMillis(),
-                            reminderHours.toIntOrNull() ?: 48,
-                            notes.ifBlank { null }
-                        )
-                    }
+                    val course = courses.getOrNull(selectedCourseIndex) ?: return@TextButton
+                    onConfirm(
+                        course.id,
+                        buildDateMillis(),
+                        reminderHours.toIntOrNull() ?: 48,
+                        notes.ifBlank { null }
+                    )
                 },
-                enabled = courses.isNotEmpty()
+                enabled = courses.isNotEmpty() && selectedCourseIndex in courses.indices
             ) { Text(if (isEditing) "\u4fdd\u5b58" else "\u786e\u5b9a") }
         },
         dismissButton = {

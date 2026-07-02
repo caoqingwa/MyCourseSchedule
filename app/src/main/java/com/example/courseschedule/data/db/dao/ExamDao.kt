@@ -15,6 +15,9 @@ interface ExamDao {
     @Query("SELECT * FROM exams WHERE examDate < :nowMillis")
     suspend fun getExpired(nowMillis: Long): List<Exam>
 
+    @Query("SELECT * FROM exams WHERE examDate > :nowMillis ORDER BY examDate")
+    suspend fun getAllPending(nowMillis: Long): List<Exam>
+
     @Query("DELETE FROM exams WHERE examDate < :nowMillis")
     suspend fun deleteExpired(nowMillis: Long)
 

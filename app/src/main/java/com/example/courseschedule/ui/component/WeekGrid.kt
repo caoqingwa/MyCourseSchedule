@@ -29,6 +29,7 @@ import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Schedule
 import com.example.courseschedule.data.db.entity.Semester
 import com.example.courseschedule.ui.theme.CourseColors
+import com.example.courseschedule.util.DateUtils
 
 private data class MergedBlock(val course: Course, val schedule: Schedule, val startPeriod: Int, val endPeriod: Int)
 
@@ -46,7 +47,9 @@ fun WeekGrid(
     onCourseLongClick: (Course, Schedule) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val dayNames = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94")
+    val weekDays = semester?.weekDays ?: 5
+    val dayNames = if (weekDays == 7) DateUtils.DAY_NAMES_7 else DateUtils.DAY_NAMES_5
+    val colCount = weekDays.coerceIn(5, 7)
     val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
     val cellShape = RoundedCornerShape(2.dp)
     val cellHeight = 44.dp
@@ -59,8 +62,8 @@ fun WeekGrid(
     val endTimes = semester?.getEndTimes() ?: Semester.defaultPeriodTimes().map { it.end }
 
     val schedulesKey = schedules.hashCode()
-    val coursesKey = courses.keys.hashCode()
-    val colBlocks = remember(schedulesKey, coursesKey, totalPeriods) { Array(5) { col ->
+    val coursesKey = courses.hashCode()
+    val colBlocks = remember(schedulesKey, coursesKey, totalPeriods, colCount) { Array(colCount) { col ->
         val daySchedules = schedules.filter { it.dayOfWeek == col + 1 }.sortedBy { it.startPeriod }
         val groups = daySchedules.groupBy { it.courseId * 100000 + it.weekType * 10000 + it.startWeek * 100 + it.endWeek }
         val result = mutableListOf<MergedBlock>()
@@ -77,14 +80,14 @@ fun WeekGrid(
         }
         result.sortedBy { it.startPeriod } } }
 
-    val occupied = remember(colBlocks.map { it.size }, totalPeriods) {
+    val occupied = remember(colBlocks.map { it.size }, totalPeriods, colCount) {
         Array(totalPeriods) { row ->
-            BooleanArray(5) { col -> colBlocks[col].any { it.startPeriod <= row + 1 && it.endPeriod >= row + 1 } }
+            BooleanArray(colCount) { col -> colBlocks[col].any { it.startPeriod <= row + 1 && it.endPeriod >= row + 1 } }
         }
     }
 
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val colWidthDp = (screenWidthDp - 52) / 5
+    val colWidthDp = (screenWidthDp - 52) / colCount
 
     Column(modifier = modifier) {
         // Header row
@@ -140,33 +143,34 @@ fun WeekGrid(
             Canvas(
                 modifier = Modifier
                     .offset(x = periodColWidth, y = 0.dp)
-                    .size(colWidthDp.dp * 5, gridBodyHeight)
+                    .size(colWidthDp.dp * colCount, gridBodyHeight)
             ) {
                 val cellW = colWidthDp.dp.toPx()
                 val cellH = cellHeight.toPx()
                 val lineColor = borderColor
 
                 // Vertical lines (between columns)
-                for (col in 0..5) {
+                for (col in 0..colCount) {
                     val x = cellW * col
                     drawLine(lineColor, Offset(x, 0f), Offset(x, cellH * totalPeriods), strokeWidth = 1.5f)
                 }
                 // Horizontal lines
                 for (row in 0..totalPeriods) {
                     val y = cellH * row
-                    drawLine(lineColor, Offset(0f, y), Offset(cellW * 5, y), strokeWidth = 1.5f)
+                    drawLine(lineColor, Offset(0f, y), Offset(cellW * colCount, y), strokeWidth = 1.5f)
                 }
             }
 
-            // Touch overlay — handles empty cell long-press
+            // Touch overlay — handles empty cell long-press, placed BEFORE course blocks
+            // so course blocks (rendered after) are on top and receive events first
             Box(
                 modifier = Modifier
                     .offset(x = periodColWidth, y = 0.dp)
-                    .size(colWidthDp.dp * 5, gridBodyHeight)
-                    .pointerInput(totalPeriods) {
+                    .size(colWidthDp.dp * colCount, gridBodyHeight)
+                    .pointerInput(totalPeriods, colCount) {
                         detectTapGestures(
                             onLongPress = { offset ->
-                                val col = (offset.x / colWidthDp.dp.toPx()).toInt().coerceIn(0, 4)
+                                val col = (offset.x / colWidthDp.dp.toPx()).toInt().coerceIn(0, colCount - 1)
                                 val row = (offset.y / cellHeight.toPx()).toInt().coerceIn(0, totalPeriods - 1)
                                 if (!occupied[row][col]) {
                                     onCellLongClick(col + 1, row + 1)
@@ -176,8 +180,8 @@ fun WeekGrid(
                     }
             )
 
-            // Course blocks
-            for (col in 0..4) {
+            // Course blocks — rendered AFTER touch overlay so they are on top and receive events first
+            for (col in 0 until colCount) {
                 for (block in colBlocks[col]) {
                     val x = periodColWidth + colWidthDp.dp * col
                     val y = cellHeight * (block.startPeriod - 1)

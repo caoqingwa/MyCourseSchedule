@@ -23,11 +23,12 @@ fun AddCourseDialog(
     currentWeek: Int,
     totalWeeks: Int,
     periodCount: Int = 12,
+    weekDays: Int = 5,
     conflicts: List<Pair<String, Int>> = emptyList(),
     onDismiss: () -> Unit,
     onConfirm: (name: String, teacher: String, room: String, weekType: Int, startWeek: Int, endWeek: Int, startPeriod: Int, endPeriod: Int) -> Unit,
 ) {
-    val dayNames = DateUtils.DAY_NAMES
+    val dayNames = if (weekDays == 7) DateUtils.DAY_NAMES_7 else DateUtils.DAY_NAMES_5
     var name by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf(false) }
     var teacher by remember { mutableStateOf("") }
@@ -71,7 +72,8 @@ fun AddCourseDialog(
                     showConflictWarning = false
                     if (!periodError) {
                         onConfirm(name.trim(), teacher.trim(), room.trim(), weekTypeIndex,
-                            startWeek.toIntOrNull() ?: currentWeek, endWeek.toIntOrNull() ?: totalWeeks,
+                            (startWeek.toIntOrNull() ?: currentWeek).coerceAtLeast(1),
+                            (endWeek.toIntOrNull() ?: totalWeeks).coerceAtLeast(1),
                             startPeriod.toIntOrNull() ?: period, endPeriod.toIntOrNull() ?: period)
                     }
                 }) { Text("\u7ee7\u7eed\u6dfb\u52a0") }
@@ -167,7 +169,8 @@ fun AddCourseDialog(
                     if (name.isBlank()) { nameError = true } else if (periodError) { /* no-op, errors shown inline */ } else {
                     if (conflicts.isEmpty()) {
                         onConfirm(name.trim(), teacher.trim(), room.trim(), weekTypeIndex,
-                            startWeek.toIntOrNull() ?: currentWeek, endWeek.toIntOrNull() ?: totalWeeks,
+                            (startWeek.toIntOrNull() ?: currentWeek).coerceAtLeast(1),
+                            (endWeek.toIntOrNull() ?: totalWeeks).coerceAtLeast(1),
                             startPeriod.toIntOrNull() ?: period, endPeriod.toIntOrNull() ?: period)
                     } else {
                         showConflictWarning = true
@@ -193,11 +196,12 @@ fun EditCourseDialog(
     weekType: Int,
     totalWeeks: Int,
     periodCount: Int = 12,
+    weekDays: Int = 5,
     onDismiss: () -> Unit,
     onConfirm: (name: String, teacher: String, room: String, dayOfWeek: Int, weekType: Int, startWeek: Int, endWeek: Int, startPeriod: Int, endPeriod: Int) -> Unit,
     onDelete: () -> Unit
 ) {
-    val dayNames = DateUtils.DAY_NAMES
+    val dayNames = if (weekDays == 7) DateUtils.DAY_NAMES_7 else DateUtils.DAY_NAMES_5
     var name by remember { mutableStateOf(courseName) }
     var nameError by remember { mutableStateOf(false) }
     var teacher by remember { mutableStateOf(courseTeacher) }
@@ -315,7 +319,8 @@ fun EditCourseDialog(
             TextButton(onClick = {
                 if (name.isBlank()) { nameError = true } else if (!periodError) {
                     onConfirm(name.trim(), teacher.trim(), room.trim(), dayOfWeek, weekTypeIndex,
-                        sWeek.toIntOrNull() ?: startWeek, eWeek.toIntOrNull() ?: endWeek,
+                        (sWeek.toIntOrNull() ?: startWeek).coerceAtLeast(1),
+                        (eWeek.toIntOrNull() ?: endWeek).coerceAtLeast(1),
                         sPeriod.toIntOrNull() ?: startPeriod, ePeriod.toIntOrNull() ?: endPeriod)
                 }
             }) { Text("\u4fdd\u5b58") }

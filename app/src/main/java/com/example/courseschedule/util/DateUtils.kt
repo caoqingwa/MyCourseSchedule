@@ -6,7 +6,9 @@ import java.util.*
 object DateUtils {
     private const val MILLIS_PER_DAY = 24 * 60 * 60 * 1000L
 
-    val DAY_NAMES = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94")
+    val DAY_NAMES_5 = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94")
+    val DAY_NAMES_7 = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d", "\u5468\u65e5")
+    val DAY_NAMES = DAY_NAMES_5
     val WEEK_TYPES = listOf("\u5168\u5468", "\u5355\u5468(\u5947\u6570\u5468)", "\u53cc\u5468(\u5076\u6570\u5468)")
 
     fun getWeekNumber(dateMillis: Long, semesterStartMillis: Long): Int {
