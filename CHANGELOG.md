@@ -1,5 +1,43 @@
 # CourseSchedule 更新日志
 
+## v2.3 (2026-06-19)
+
+### 构建修复
+- AndroidManifest: 添加 tools 命名空间，移除默认 WorkManagerInitializer 以适配 on-demand 初始化，修复 release lint 报错
+
+### 底部导航栏滑动切换
+- BottomNavBar: 在导航栏外层添加 pointerInput 拖拽手势检测，水平拖动超过 50dp 即切换页面
+- BottomNavBar: 恢复各 tab 的 clickable，点击切换正常；拖拽手势仅在水平移动超过 30dp 阈值后才消费事件，不影响点击
+
+### 课程颜色系统重做
+- Color: 删除固定调色板 CourseColors，新增 buildCourseColorMap 函数，对课程名排序后在 HSL 色相环均匀分配色相（饱和度 0.45，亮度 0.72），自动跳过黄色系
+- 规则保证：同名课程同色，不同名课程不同色，课程数量不限
+- WeekGrid: 用 buildCourseColorMap 替代旧的按 courseId 分配颜色
+- CourseCard: 同样用 buildCourseColorMap 按课程名取色
+- WeekViewModel: 新建课程时 color 字段设为占位值，实际颜色由渲染时按名称动态计算
+- WeekGrid: 移除 colColorIndices 相邻块颜色避让逻辑，HSL 方案天然保证不同名不同色
+
+---
+
+## v2.2 (2026-06-19)
+
+### 周课表日期行
+- WeekGrid: 新增日期行，显示当前周每天的实际日期（如 16、17、18...），浅色分割线分隔
+- WeekGrid: 节次列表头显示当前周所在月份（如"6月"）
+- WeekGrid: 今天日期用 primary 色高亮显示
+- WeekScreen: 传递 selectedWeek 给 WeekGrid
+
+### 周课表布局优化
+- WeekGrid: 格子高度 44dp → 80dp，显示更多课程信息
+- WeekGrid: 节次列宽度固定 40dp，与其他列等宽
+- WeekGrid: 日期行字号增大到 12sp
+- WeekGrid: 课程名 maxLines 2→3，lineHeight 增大
+- WeekGrid: 节次/时间字号增大
+
+### 课程颜色统一
+- Color: 新增 getCourseColorByName 函数，基于课程名 hashCode 分配颜色
+- WeekGrid/CourseCard: 同名课程使用相同颜色
+
 ## v2.1 (2026-06-19)
 
 ### 防止误触外层滚动

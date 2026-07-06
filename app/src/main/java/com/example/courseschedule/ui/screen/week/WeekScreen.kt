@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -165,6 +166,7 @@ fun WeekScreen(
                                 currentDayOfWeek = state.currentDayOfWeek,
                                 highlightDayOfWeek = if (state.highlightDayOfWeek > 0) state.highlightDayOfWeek
                                     else if (state.selectedWeek == state.currentWeek) state.currentDayOfWeek else 0,
+                                selectedWeek = state.selectedWeek,
                                 modifier = Modifier.fillMaxWidth(),
                                 onCellClick = { course, _ -> onCourseClick(course.id) },
                                 onCellLongClick = { day, period ->

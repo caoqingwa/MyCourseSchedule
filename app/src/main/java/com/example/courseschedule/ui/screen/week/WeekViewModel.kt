@@ -9,7 +9,6 @@ import com.example.courseschedule.data.db.entity.Schedule
 import com.example.courseschedule.data.db.entity.Semester
 import com.example.courseschedule.data.repository.CourseRepository
 import com.example.courseschedule.ui.navigation.NavigationState
-import com.example.courseschedule.ui.theme.CourseColors
 import com.example.courseschedule.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -170,11 +169,10 @@ class WeekViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             val semester = repository.getCurrentSemester().first() ?: return@launch
-            val colorIdx = (System.currentTimeMillis() % CourseColors.size).toInt()
             val roomId = if (room.isNotBlank()) repository.insertRoom(Room(name = room)) else null
             val course = Course(
                 semesterId = semester.id, name = name, teacher = teacher,
-                color = colorIdx.toString(), roomId = roomId
+                color = "0", roomId = roomId
             )
             val schedule = Schedule(
                 courseId = 0, dayOfWeek = dayOfWeek, startPeriod = startPeriod,
