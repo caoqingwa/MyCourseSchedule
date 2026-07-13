@@ -13,6 +13,11 @@
 - Color: 删除固定调色板 CourseColors，新增 buildCourseColorMap 函数，对课程名排序后在 HSL 色相环均匀分配色相（饱和度 0.45，亮度 0.72），自动跳过黄色系
 - 规则保证：同名课程同色，不同名课程不同色，课程数量不限
 - WeekGrid: 用 buildCourseColorMap 替代旧的按 courseId 分配颜色
+
+### 考试提醒修复
+- ExamReminderWorker: delayMillis <= 0 时不再静默跳过，改为 coerceAtLeast(0) 立即触发
+- ExamReminderWorker: input data 改为传递 exam_millis（考试时间戳），worker 运行时重新计算剩余小时数，避免调度时预计算导致通知内容过时
+- ExamReminderWorker: worker 运行时检查通知权限，无权限时静默跳过而非崩溃
 - CourseCard: 同样用 buildCourseColorMap 按课程名取色
 - WeekViewModel: 新建课程时 color 字段设为占位值，实际颜色由渲染时按名称动态计算
 - WeekGrid: 移除 colColorIndices 相邻块颜色避让逻辑，HSL 方案天然保证不同名不同色

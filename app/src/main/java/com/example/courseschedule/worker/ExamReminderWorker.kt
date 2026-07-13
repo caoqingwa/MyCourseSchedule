@@ -18,33 +18,41 @@ class ExamReminderWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val examName = inputData.getString("exam_name") ?: return Result.failure()
-        val hoursUntilExam = inputData.getInt("hours_until_exam", 0)
+        val examMillis = inputData.getLong("exam_millis", 0L)
         val examId = inputData.getLong("exam_id", -1L)
 
-        if (hoursUntilExam <= 0) {
+        if (examMillis <= 0L) return Result.failure()
+
+        val now = System.currentTimeMillis()
+        val hoursLeft = ((examMillis - now) / 3_600_000L).toInt().coerceAtLeast(0)
+
+        if (examMillis < now) {
+            // 考试已过期，清理
             if (examId >= 0) {
                 examDao.getById(examId)?.let { exam ->
-                    if (exam.examDate < System.currentTimeMillis()) {
-                        examDao.delete(exam)
-                    }
+                    if (exam.examDate < now) examDao.delete(exam)
                 }
             }
             return Result.success()
         }
 
-        NotificationHelper.showExamReminder(applicationContext, examName, hoursUntilExam)
+        if (!NotificationHelper.hasNotificationPermission(applicationContext)) {
+            return Result.success()
+        }
+
+        NotificationHelper.showExamReminder(applicationContext, examName, hoursLeft)
         return Result.success()
     }
 
     companion object {
         fun schedule(context: Context, examName: String, examMillis: Long, reminderHours: Int, examId: Long = -1L) {
             val now = System.currentTimeMillis()
-            val delayMillis = (examMillis - now) - reminderHours.toLong() * 3600_000L
-            if (delayMillis <= 0) return
-            val hoursUntilExam = ((examMillis - now) / 3600_000L).toInt().coerceAtLeast(0)
+            val triggerMillis = examMillis - reminderHours.toLong() * 3_600_000L
+            val delayMillis = (triggerMillis - now).coerceAtLeast(0L)
+
             val data = workDataOf(
                 "exam_name" to examName,
-                "hours_until_exam" to hoursUntilExam,
+                "exam_millis" to examMillis,
                 "exam_id" to examId
             )
             val request = OneTimeWorkRequestBuilder<ExamReminderWorker>()
