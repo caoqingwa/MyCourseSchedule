@@ -40,34 +40,6 @@ class TodayViewModel @Inject constructor(
         val hasWeekendCourses: Boolean = false
     )
 
-    private fun getPeriodEndMillis(period: Int, semester: Semester): Long {
-        val times = semester.getPeriodTimes()
-        val range = times.getOrNull(period - 1) ?: return 0L
-        val (h, m) = range.end.split(":").map { it.toIntOrNull() ?: 0 }
-        val cal = Calendar.getInstance().apply {
-            timeInMillis = todayMillis
-            set(Calendar.HOUR_OF_DAY, h)
-            set(Calendar.MINUTE, m)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        return cal.timeInMillis
-    }
-
-    private fun getPeriodStartMillis(period: Int, semester: Semester): Long {
-        val times = semester.getPeriodTimes()
-        val range = times.getOrNull(period - 1) ?: return Long.MAX_VALUE
-        val (h, m) = range.start.split(":").map { it.toIntOrNull() ?: 0 }
-        val cal = Calendar.getInstance().apply {
-            timeInMillis = todayMillis
-            set(Calendar.HOUR_OF_DAY, h)
-            set(Calendar.MINUTE, m)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        return cal.timeInMillis
-    }
-
     val uiState: StateFlow<TodayUiState> = combine(
         repository.getCurrentSemester(),
         repository.getAllSemesters()
@@ -91,6 +63,7 @@ class TodayViewModel @Inject constructor(
             }.sortedBy { it.startPeriod }
 
             val now = System.currentTimeMillis()
+            val periodTimes = semester.getPeriodTimes()
             val currentPeriod = DateUtils.getCurrentPeriod(semester)
 
             var current: CourseWithSchedule? = null
@@ -102,8 +75,22 @@ class TodayViewModel @Inject constructor(
                 )
                 val roomName = course.roomId?.let { roomMap[it] }
                 val cws = CourseWithSchedule(course, sched, roomName)
-                val endTime = getPeriodEndMillis(sched.endPeriod, semester)
-                val startTime = getPeriodStartMillis(sched.startPeriod, semester)
+                val endRange = periodTimes.getOrNull(sched.endPeriod - 1)
+                val startRange = periodTimes.getOrNull(sched.startPeriod - 1)
+                val endTime = if (endRange != null) {
+                    val (h, m) = endRange.end.split(":").map { it.toIntOrNull() ?: 0 }
+                    Calendar.getInstance().apply {
+                        timeInMillis = todayMillis; set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m)
+                        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                    }.timeInMillis
+                } else 0L
+                val startTime = if (startRange != null) {
+                    val (h, m) = startRange.start.split(":").map { it.toIntOrNull() ?: 0 }
+                    Calendar.getInstance().apply {
+                        timeInMillis = todayMillis; set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m)
+                        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                    }.timeInMillis
+                } else Long.MAX_VALUE
                 when {
                     now < startTime -> upcoming.add(cws)
                     now >= startTime && now < endTime -> current = cws

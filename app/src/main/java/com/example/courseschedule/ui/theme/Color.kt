@@ -37,6 +37,19 @@ fun buildCourseColorMap(courseNames: Collection<String>): Map<String, Pair<Color
     return map
 }
 
+/**
+ * 根据单个课程名直接生成颜色，无需构建 Map。
+ * 用于 CourseCard 等只需要单个颜色的场景。
+ */
+fun getCourseColorByName(courseName: String): Pair<Color, Color> {
+    val sortedNames = listOf(courseName).toSortedSet()
+    val idx = 0
+    val count = 1
+    val hueBase = (360f / count) * idx
+    val hue = if (hueBase in 45f..65f) hueBase + 30f else hueBase
+    return hslToColor(hue, 0.45f, 0.72f) to Color(0xFFFFFFFF)
+}
+
 /** HSL → Compose Color，h∈[0,360), s/l∈[0,1] */
 private fun hslToColor(h: Float, s: Float, l: Float): Color {
     val c = (1f - kotlin.math.abs(2f * l - 1f)) * s

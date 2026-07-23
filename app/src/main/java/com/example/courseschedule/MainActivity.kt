@@ -54,29 +54,29 @@ fun MainApp() {
         stiffness = Spring.StiffnessMediumLow
     )
 
-    fun navigateTo(index: Int) {
-        val current = pagerState.currentPage
-        if (index == current || transitioning) return
-        coroutineScope.launch {
-            if (kotlin.math.abs(index - current) > 1) {
-                transitioning = true
-                // Phase 1: current page shrinks + fades out
-                coroutineScope {
-                    launch { alpha.animateTo(0f, pageSpring) }
-                    launch { scale.animateTo(0.92f, pageSpring) }
+    val navigateTo = remember(pagerState, transitioning, alpha, scale, pageSpring) {
+        { index: Int ->
+            val current = pagerState.currentPage
+            if (index != current && !transitioning) {
+                coroutineScope.launch {
+                    if (kotlin.math.abs(index - current) > 1) {
+                        transitioning = true
+                        coroutineScope {
+                            launch { alpha.animateTo(0f, pageSpring) }
+                            launch { scale.animateTo(0.92f, pageSpring) }
+                        }
+                        pagerState.scrollToPage(index)
+                        alpha.snapTo(0f)
+                        scale.snapTo(1.08f)
+                        coroutineScope {
+                            launch { alpha.animateTo(1f, pageSpring) }
+                            launch { scale.animateTo(1f, pageSpring) }
+                        }
+                        transitioning = false
+                    } else {
+                        pagerState.animateScrollToPage(index)
+                    }
                 }
-                // Phase 2: instant jump
-                pagerState.scrollToPage(index)
-                // Phase 3: new page grows + fades in
-                alpha.snapTo(0f)
-                scale.snapTo(1.08f)
-                coroutineScope {
-                    launch { alpha.animateTo(1f, pageSpring) }
-                    launch { scale.animateTo(1f, pageSpring) }
-                }
-                transitioning = false
-            } else {
-                pagerState.animateScrollToPage(index)
             }
         }
     }

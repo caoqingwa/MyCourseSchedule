@@ -14,8 +14,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -101,14 +102,15 @@ class WeekViewModel @Inject constructor(
         val courses = mutableMapOf<Long, Course>()
         active.forEach { s -> coursesMap[s.courseId]?.let { courses[s.courseId] = it } }
         val range = DateUtils.getWeekRange(semester.startDate, week)
-        val rangeStr = FMT_FULL.format(Date(range.first)) + " ~ " +
-            FMT_SHORT.format(Date(range.second))
+        val rangeStr = Instant.ofEpochMilli(range.first).atZone(Zone).format(FMT_FULL) + " ~ " +
+            Instant.ofEpochMilli(range.second).atZone(Zone).format(FMT_SHORT)
         return WeekPageData(schedules = active, courseMap = courses, roomMap = roomMap, weekRange = rangeStr)
     }
 
     companion object {
-        private val FMT_FULL = SimpleDateFormat("yyyy.MM.dd", Locale.getDefault())
-        private val FMT_SHORT = SimpleDateFormat("MM.dd", Locale.getDefault())
+        private val FMT_FULL = DateTimeFormatter.ofPattern("yyyy.MM.dd")
+        private val FMT_SHORT = DateTimeFormatter.ofPattern("MM.dd")
+        private val Zone = ZoneId.systemDefault()
     }
 
     val uiState: StateFlow<WeekUiState> = repository.getCurrentSemester()
@@ -214,9 +216,9 @@ class WeekViewModel @Inject constructor(
         weekType: Int, startWeek: Int, endWeek: Int,
         excludeScheduleId: Long = 0
     ): List<ConflictInfo> {
-        val semester = repository.getCurrentSemester().first() ?: return emptyList()
-        val schedules = repository.getSchedulesBySemester(semester.id).first()
-        val courseMap = repository.getCoursesBySemester(semester.id).first().associateBy { it.id }
+        val state = uiState.value
+        val schedules = state.currentPage.schedules
+        val courseMap = state.currentPage.courseMap
         val conflicts = mutableListOf<ConflictInfo>()
         for (existing in schedules) {
             if (existing.id == excludeScheduleId) continue

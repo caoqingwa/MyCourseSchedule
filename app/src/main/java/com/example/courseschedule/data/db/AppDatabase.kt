@@ -9,7 +9,7 @@ import com.example.courseschedule.data.db.entity.*
 
 @Database(
     entities = [Semester::class, Course::class, Schedule::class, Room::class, Exam::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -44,6 +44,14 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE semesters ADD COLUMN weekDays INTEGER NOT NULL DEFAULT 5")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_courses_semester ON courses(semesterId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_schedules_course ON schedules(courseId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS idx_exams_course ON exams(courseId)")
             }
         }
     }

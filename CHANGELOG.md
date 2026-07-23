@@ -1,5 +1,24 @@
 # CourseSchedule 更新日志
 
+## v2.4 (2026-06-19)
+
+### 性能优化
+- WeekViewModel: SimpleDateFormat → DateTimeFormatter，修复 companion object 线程安全 bug
+- WeekViewModel: checkConflict 改为读取 uiState.value，消除 3 次冗余数据库查询
+- CalendarViewModel: schedules 从 .first() 阻塞调用改为 combine 第四个 Flow，响应式更新
+- CalendarViewModel: weeklyCourseCount 从 hardcoded (1..5) 改为动态 (1..semester.weekDays)
+- TodayViewModel: getPeriodTimes() JSON 解析提升到 map 开头，单次解析替代每 schedule 2 次
+- WeekGrid: startTimes/endTimes 用 remember(semester) 缓存，消除每次重组的 JSON 解析
+- WeekGrid: occupied remember key 从 colBlocks.map{size} 改为 schedulesKey+coursesKey
+- WeekGrid: fallback 颜色提取为顶层常量，避免每次创建新 Color 对象
+- CourseCard: 颜色计算从 buildCourseColorMap 改为 getCourseColorByName，省去 Map 构建
+- MainActivity: navigateTo 从 local fun 改为 remember lambda，减少重组时的函数对象分配
+- Room 索引: Course.semesterId、Schedule.courseId、Exam.courseId 添加索引，消除子查询全表扫描
+- DAO 优化: ScheduleDao/ExamDao 的 IN 子查询改为 INNER JOIN
+- 数据库: 版本 v4→v5，MIGRATION_4_5 创建三个索引
+
+---
+
 ## v2.3 (2026-06-19)
 
 ### 构建修复

@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -32,6 +33,7 @@ import com.example.courseschedule.ui.theme.buildCourseColorMap
 import com.example.courseschedule.util.DateUtils
 
 private data class MergedBlock(val course: Course, val schedule: Schedule, val startPeriod: Int, val endPeriod: Int)
+private val FallbackColor = Color.Gray to Color.White
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -84,8 +86,10 @@ fun WeekGrid(
         }
     }
 
-    val startTimes = semester?.getStartTimes() ?: Semester.defaultPeriodTimes().map { it.start }
-    val endTimes = semester?.getEndTimes() ?: Semester.defaultPeriodTimes().map { it.end }
+    val (startTimes, endTimes) = remember(semester) {
+        val times = semester?.getPeriodTimes() ?: Semester.defaultPeriodTimes()
+        times.map { it.start } to times.map { it.end }
+    }
 
     val schedulesKey = schedules.hashCode()
     val coursesKey = courses.hashCode()
@@ -111,7 +115,7 @@ fun WeekGrid(
         buildCourseColorMap(courses.values.map { it.name })
     }
 
-    val occupied = remember(colBlocks.map { it.size }, totalPeriods, colCount) {
+    val occupied = remember(schedulesKey, coursesKey, totalPeriods, colCount) {
         Array(totalPeriods) { row ->
             BooleanArray(colCount) { col -> colBlocks[col].any { it.startPeriod <= row + 1 && it.endPeriod >= row + 1 } }
         }
@@ -253,8 +257,7 @@ fun WeekGrid(
                     val y = cellHeight * (block.startPeriod - 1)
                     val span = block.endPeriod - block.startPeriod + 1
                     val blockHeight = cellHeight * span
-                    val (bg, fg) = courseColorMap[block.course.name]
-                        ?: (androidx.compose.ui.graphics.Color.Gray to androidx.compose.ui.graphics.Color.White)
+                    val (bg, fg) = courseColorMap[block.course.name] ?: FallbackColor
 
                     Box(
                         modifier = Modifier

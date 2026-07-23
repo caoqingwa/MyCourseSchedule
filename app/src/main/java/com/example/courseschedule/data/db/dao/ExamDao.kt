@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ExamDao {
-    @Query("SELECT * FROM exams WHERE courseId IN (SELECT id FROM courses WHERE semesterId = :semesterId) ORDER BY examDate")
+    @Query("SELECT e.* FROM exams e INNER JOIN courses c ON e.courseId = c.id WHERE c.semesterId = :semesterId ORDER BY e.examDate")
     fun getBySemester(semesterId: Long): Flow<List<Exam>>
 
     @Query("SELECT * FROM exams WHERE id = :id")

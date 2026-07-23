@@ -1,8 +1,9 @@
-﻿package com.example.courseschedule.data.db.entity
+package com.example.courseschedule.data.db.entity
 
 import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Immutable
@@ -13,7 +14,8 @@ import androidx.room.PrimaryKey
         parentColumns = ["id"],
         childColumns = ["courseId"],
         onDelete = ForeignKey.CASCADE
-    )]
+    )],
+    indices = [Index("courseId")]
 )
 data class Schedule(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

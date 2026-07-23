@@ -10,7 +10,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Schedule
-import com.example.courseschedule.ui.theme.buildCourseColorMap
+import com.example.courseschedule.ui.theme.getCourseColorByName
 import com.example.courseschedule.util.DateUtils
 
 @Immutable
@@ -28,8 +27,7 @@ data class CourseWithSchedule(val course: Course, val schedule: Schedule, val ro
 
 @Composable
 fun CourseCard(item: CourseWithSchedule, isCurrent: Boolean, nextInfo: String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val colorMap = remember(item.course.name) { buildCourseColorMap(listOf(item.course.name)) }
-    val (bg, fg) = colorMap[item.course.name] ?: (Color.Gray to Color.White)
+    val (bg, fg) = getCourseColorByName(item.course.name)
     Column(
         modifier = modifier.fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))

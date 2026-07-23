@@ -49,29 +49,28 @@ class CalendarViewModel @Inject constructor(
         } else {
             combine(
                 repository.getExamsBySemester(semester.id),
-                repository.getCoursesBySemester(semester.id)
-            ) { exams, courses -> exams to courses }
-                .map { (exams, courses) ->
-                    val now = System.currentTimeMillis()
-                    val week = DateUtils.getWeekNumber(now, semester.startDate)
-                    val dow = DateUtils.getDayOfWeek(now)
-                    val schedules = repository.getSchedulesBySemester(semester.id).first()
-                    val counts = (1..5).map { day ->
-                        schedules.count {
-                            it.dayOfWeek == day && DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, week)
-                        }
+                repository.getCoursesBySemester(semester.id),
+                repository.getSchedulesBySemester(semester.id)
+            ) { exams, courses, schedules ->
+                val now = System.currentTimeMillis()
+                val week = DateUtils.getWeekNumber(now, semester.startDate)
+                val dow = DateUtils.getDayOfWeek(now)
+                val counts = (1..semester.weekDays).map { day ->
+                    schedules.count {
+                        it.dayOfWeek == day && DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, week)
                     }
-                    CalendarUiState(
-                        semester = semester,
-                        currentWeek = week,
-                        currentDayOfWeek = dow,
-                        todayMillis = now,
-                        exams = exams,
-                        courses = courses,
-                        weeklyCourseCount = counts,
-                        notificationsEnabled = enabled
-                    )
                 }
+                CalendarUiState(
+                    semester = semester,
+                    currentWeek = week,
+                    currentDayOfWeek = dow,
+                    todayMillis = now,
+                    exams = exams,
+                    courses = courses,
+                    weeklyCourseCount = counts,
+                    notificationsEnabled = enabled
+                )
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CalendarUiState())
 
