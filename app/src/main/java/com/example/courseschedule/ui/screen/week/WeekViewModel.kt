@@ -42,6 +42,8 @@ class WeekViewModel @Inject constructor(
         val highlightDayOfWeek: Int = 0,
         val totalWeeks: Int = 20,
         val currentPage: WeekPageData = WeekPageData(),
+        val allSchedules: List<Schedule> = emptyList(),
+        val allCourseMap: Map<Long, Course> = emptyMap(),
         val presets: List<Semester> = emptyList(),
         val maxScheduledPeriod: Int = 0,
         val hasWeekendCourses: Boolean = false
@@ -142,6 +144,8 @@ class WeekViewModel @Inject constructor(
                         highlightDayOfWeek = highlightDay,
                         totalWeeks = semester.totalWeeks,
                         currentPage = currentPage,
+                        allSchedules = schedules,
+                        allCourseMap = courseMap,
                         presets = presets,
                         maxScheduledPeriod = maxPeriod,
                         hasWeekendCourses = hasWeekend
@@ -217,8 +221,8 @@ class WeekViewModel @Inject constructor(
         excludeScheduleId: Long = 0
     ): List<ConflictInfo> {
         val state = uiState.value
-        val schedules = state.currentPage.schedules
-        val courseMap = state.currentPage.courseMap
+        val schedules = state.allSchedules
+        val courseMap = state.allCourseMap
         val conflicts = mutableListOf<ConflictInfo>()
         for (existing in schedules) {
             if (existing.id == excludeScheduleId) continue
