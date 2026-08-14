@@ -15,14 +15,18 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.courseschedule.data.db.entity.Course
+import com.example.courseschedule.data.db.entity.Schedule
 import com.example.courseschedule.ui.navigation.Screen
 import com.example.courseschedule.ui.navigation.bottomNavItems
 import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.ui.component.BottomNavBar
+import com.example.courseschedule.ui.component.EditCourseDialog
 import com.example.courseschedule.ui.screen.detail.CourseDetailSheet
 import com.example.courseschedule.ui.screen.detail.CourseDetailViewModel
 import com.example.courseschedule.ui.screen.today.TodayScreen
 import com.example.courseschedule.ui.screen.week.WeekScreen
+import com.example.courseschedule.ui.screen.week.WeekViewModel
 import com.example.courseschedule.ui.screen.calendar.CalendarScreen
 import com.example.courseschedule.ui.theme.CourseScheduleTheme
 import com.example.courseschedule.util.DateUtils
@@ -52,6 +56,13 @@ fun MainApp() {
     var selectedCourseId by remember { mutableStateOf<Long?>(null) }
     val detailViewModel: CourseDetailViewModel = hiltViewModel()
     val detailState by detailViewModel.uiState.collectAsStateWithLifecycle()
+    val weekViewModel: WeekViewModel = hiltViewModel()
+
+    var editTarget by remember { mutableStateOf<Pair<Course, Schedule>?>(null) }
+    var editRoom by remember { mutableStateOf("") }
+    var editTotalWeeks by remember { mutableIntStateOf(20) }
+    var editPeriodCount by remember { mutableIntStateOf(12) }
+    var editWeekDays by remember { mutableIntStateOf(5) }
 
     LaunchedEffect(selectedCourseId) {
         selectedCourseId?.let { detailViewModel.show(it) }
@@ -143,9 +154,50 @@ fun MainApp() {
                 detailViewModel.clear()
             },
             onEdit = {
+                detailState.schedules.firstOrNull()?.let { sched ->
+                    editTarget = course to sched
+                    editRoom = detailState.roomName ?: ""
+                    detailState.semester?.let {
+                        editTotalWeeks = it.totalWeeks
+                        editPeriodCount = it.periodCount
+                        editWeekDays = it.weekDays
+                    }
+                }
                 selectedCourseId = null
                 detailViewModel.clear()
-                navigateTo(1)
+            }
+        )
+    }
+
+    val target = editTarget
+    val targetCourse = target?.first
+    val targetSchedule = target?.second
+    if (targetCourse != null && targetSchedule != null) {
+        EditCourseDialog(
+            courseName = targetCourse.name,
+            courseTeacher = targetCourse.teacher,
+            courseRoom = editRoom,
+            dayOfWeek = targetSchedule.dayOfWeek,
+            startPeriod = targetSchedule.startPeriod,
+            endPeriod = targetSchedule.endPeriod,
+            startWeek = targetSchedule.startWeek,
+            endWeek = targetSchedule.endWeek,
+            weekType = targetSchedule.weekType,
+            totalWeeks = editTotalWeeks,
+            periodCount = editPeriodCount,
+            weekDays = editWeekDays,
+            onDismiss = { editTarget = null },
+            onConfirm = { name, teacher, room, dayOfWeek, weekType, startWeek, endWeek, startPeriod, endPeriod ->
+                weekViewModel.updateCourseAndSchedule(
+                    courseId = targetCourse.id, scheduleId = targetSchedule.id,
+                    name = name, teacher = teacher, room = room, dayOfWeek = dayOfWeek, weekType = weekType,
+                    startWeek = startWeek, endWeek = endWeek, startPeriod = startPeriod, endPeriod = endPeriod
+                )
+                editTarget = null
+            },
+            onDelete = {
+                weekViewModel.deleteCourse(targetCourse.id)
+                editTarget = null
             }
         )
     }

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Schedule
+import com.example.courseschedule.data.db.entity.Semester
 import com.example.courseschedule.data.repository.CourseRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,7 +22,8 @@ class CourseDetailViewModel @Inject constructor(
     data class DetailUiState(
         val course: Course? = null,
         val schedules: List<Schedule> = emptyList(),
-        val roomName: String? = null
+        val roomName: String? = null,
+        val semester: Semester? = null
     )
 
     private val _courseId = MutableStateFlow<Long?>(null)
@@ -32,7 +34,8 @@ class CourseDetailViewModel @Inject constructor(
             val course = repository.getCourseById(id) ?: return@flow
             val schedules = repository.getSchedulesByCourse(id)
             val roomName = course.roomId?.let { repository.getRoomById(it)?.name }
-            emit(DetailUiState(course, schedules, roomName))
+            val semester = repository.getSemesterById(course.semesterId)
+            emit(DetailUiState(course, schedules, roomName, semester))
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DetailUiState())
 
