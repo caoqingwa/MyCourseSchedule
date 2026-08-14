@@ -20,9 +20,15 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun examDao(): ExamDao
 
     companion object {
-        // v1 与 v2 实体结构相同，仅补链，保证老用户可从版本 1 平滑升级
+        // v1→v2：semesters 表新增 periodCount 与 periodTimesJson 两列（NOT NULL 需带默认值）
         val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(db: SupportSQLiteDatabase) {}
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE semesters ADD COLUMN periodCount INTEGER NOT NULL DEFAULT 12")
+                db.execSQL("""
+                    ALTER TABLE semesters ADD COLUMN periodTimesJson TEXT NOT NULL DEFAULT
+                    '[{"start":"08:00","end":"08:45"},{"start":"08:55","end":"09:40"},{"start":"10:00","end":"10:45"},{"start":"10:55","end":"11:40"},{"start":"14:00","end":"14:45"},{"start":"14:55","end":"15:40"},{"start":"16:00","end":"16:45"},{"start":"16:55","end":"17:40"},{"start":"19:00","end":"19:45"},{"start":"19:55","end":"20:40"},{"start":"20:50","end":"21:35"},{"start":"21:45","end":"22:30"}]'
+                """)
+            }
         }
 
         val MIGRATION_2_3 = object : Migration(2, 3) {
