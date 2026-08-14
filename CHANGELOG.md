@@ -1,6 +1,6 @@
 # CourseSchedule 更新日志
 
-## v2.6.2 (2026-06-11)
+## v2.6.2 (2026-08-14)
 
 ### 课程编辑修复
 - CourseDetailSheet "编辑"按钮：之前仅跳转周课表，现在直接弹出编辑课程对话框
@@ -9,7 +9,7 @@
 
 ---
 
-## v2.6.1 (2026-06-11)
+## v2.6.1 (2026-08-14)
 
 ### 数据迁移修复（教室丢失回归）
 - 修复 v2.6 的 MIGRATION_6_7 缺陷：rooms.name 去重时直接删除重复行，导致引用被删行的课程教室丢失（显示"待分配"）
@@ -19,7 +19,7 @@
 
 ---
 
-## v2.6 (2026-06-11)
+## v2.6 (2026-08-14)
 
 ### 崩溃修复 (P0)
 - TodayScreen: LazyColumn key 从 `course.id*1000+startPeriod` 改为唯一 `schedule.id`，修复同一课程同节重复 Schedule 导致列表崩溃
@@ -62,7 +62,7 @@
 
 ---
 
-## v2.5 (2026-06-10)
+## v2.5 (2026-08-14)
 
 ### 迁移崩溃修复
 - 数据库: v5→v6，MIGRATION_5_6 修复早期 v5 构建遗留的错误索引名 (idx_*)，重建正确的 Room 索引
@@ -77,7 +77,7 @@
 
 ---
 
-## v2.4 (2026-06-19)
+## v2.4 (2026-07-23)
 
 ### 性能优化
 - WeekViewModel: SimpleDateFormat → DateTimeFormatter，修复 companion object 线程安全 bug
@@ -96,7 +96,7 @@
 
 ---
 
-## v2.3 (2026-06-19)
+## v2.3 (2026-07-08)
 
 ### 构建修复
 - AndroidManifest: 添加 tools 命名空间，移除默认 WorkManagerInitializer 以适配 on-demand 初始化，修复 release lint 报错
@@ -139,7 +139,7 @@
 - Color: 新增 getCourseColorByName 函数，基于课程名 hashCode 分配颜色
 - WeekGrid/CourseCard: 同名课程使用相同颜色
 
-## v2.1 (2026-06-19)
+## v2.1 (2026-07-02)
 
 ### 防止误触外层滚动
 - SemesterSetupDialog: 移除 ScrollNumberPicker 的 nestedScroll，消除与 ModalBottomSheet 的滚动冲突导致的抽搐
