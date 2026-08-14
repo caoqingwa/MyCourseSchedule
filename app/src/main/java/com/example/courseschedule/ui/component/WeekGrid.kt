@@ -51,8 +51,8 @@ fun WeekGrid(
     modifier: Modifier = Modifier
 ) {
     val weekDays = semester?.weekDays ?: 5
-    val dayNames = if (weekDays == 7) DateUtils.DAY_NAMES_7 else DateUtils.DAY_NAMES_5
     val colCount = weekDays.coerceIn(5, 7)
+    val dayNames = if (colCount == 7) DateUtils.DAY_NAMES_7 else DateUtils.DAY_NAMES_5
     val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
     val cellShape = RoundedCornerShape(2.dp)
     val cellHeight = 80.dp
@@ -252,17 +252,23 @@ fun WeekGrid(
 
             // Course blocks — rendered AFTER touch overlay so they are on top and receive events first
             for (col in 0 until colCount) {
-                for (block in colBlocks[col]) {
-                    val x = periodColWidthDp + colWidthDp.dp * col
+                val blocks = colBlocks[col]
+                var prevEnd = 0
+                for (block in blocks) {
+                    // 与前一块时间重叠时半宽并排，避免后画的块完全盖住先画的
+                    val overlaps = block.startPeriod <= prevEnd
+                    val x = periodColWidthDp + colWidthDp.dp * col + if (overlaps) colWidthDp.dp * 0.5f else 0.dp
+                    val blockWidth = if (overlaps) colWidthDp.dp * 0.5f else colWidthDp.dp
                     val y = cellHeight * (block.startPeriod - 1)
                     val span = block.endPeriod - block.startPeriod + 1
                     val blockHeight = cellHeight * span
                     val (bg, fg) = courseColorMap[block.course.name] ?: FallbackColor
+                    prevEnd = maxOf(prevEnd, block.endPeriod)
 
                     Box(
                         modifier = Modifier
                             .offset(x, y)
-                            .size(colWidthDp.dp, blockHeight)
+                            .size(blockWidth, blockHeight)
                             .clip(cellShape)
                             .background(bg)
                             .combinedClickable(

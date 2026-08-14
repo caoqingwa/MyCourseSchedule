@@ -13,10 +13,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.courseschedule.ui.navigation.Screen
 import com.example.courseschedule.ui.navigation.bottomNavItems
 import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.ui.component.BottomNavBar
+import com.example.courseschedule.ui.screen.detail.CourseDetailSheet
+import com.example.courseschedule.ui.screen.detail.CourseDetailViewModel
 import com.example.courseschedule.ui.screen.today.TodayScreen
 import com.example.courseschedule.ui.screen.week.WeekScreen
 import com.example.courseschedule.ui.screen.calendar.CalendarScreen
@@ -44,6 +48,14 @@ fun MainApp() {
     val pagerState = rememberPagerState(pageCount = { 3 })
     val coroutineScope = rememberCoroutineScope()
     val screens = bottomNavItems
+
+    var selectedCourseId by remember { mutableStateOf<Long?>(null) }
+    val detailViewModel: CourseDetailViewModel = hiltViewModel()
+    val detailState by detailViewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(selectedCourseId) {
+        selectedCourseId?.let { detailViewModel.show(it) }
+    }
 
     val alpha = remember { Animatable(1f) }
     val scale = remember { Animatable(1f) }
@@ -107,8 +119,8 @@ fun MainApp() {
             beyondViewportPageCount = 0
         ) { page ->
             when (page) {
-                0 -> TodayScreen(onCourseClick = { })
-                1 -> WeekScreen(onCourseClick = { })
+                0 -> TodayScreen(onCourseClick = { selectedCourseId = it })
+                1 -> WeekScreen(onCourseClick = { selectedCourseId = it })
                 2 -> CalendarScreen(
                     onDayClick = { dayMillis, weekNumber ->
                         NavigationState.targetWeek = weekNumber
@@ -119,5 +131,22 @@ fun MainApp() {
                 )
             }
         }
+    }
+
+    detailState.course?.let { course ->
+        CourseDetailSheet(
+            course = course,
+            schedules = detailState.schedules,
+            roomName = detailState.roomName,
+            onDismiss = {
+                selectedCourseId = null
+                detailViewModel.clear()
+            },
+            onEdit = {
+                selectedCourseId = null
+                detailViewModel.clear()
+                navigateTo(1)
+            }
+        )
     }
 }

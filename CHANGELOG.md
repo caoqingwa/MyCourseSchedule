@@ -1,5 +1,63 @@
 # CourseSchedule 更新日志
 
+## v2.6 (2026-06-11)
+
+### 崩溃修复 (P0)
+- TodayScreen: LazyColumn key 从 `course.id*1000+startPeriod` 改为唯一 `schedule.id`，修复同一课程同节重复 Schedule 导致列表崩溃
+- 数据库: 补齐 MIGRATION_1_2（v1 老用户此前升级直接闪退）
+- 数据库: MIGRATION_2_3 的 reminderHours 从硬编码 48 改为 `COALESCE(reminderDays,2)*24`，保留 v1/v2 用户的提醒配置
+
+### 提醒系统重构
+- CourseReminderWorker: uniqueName 加入 scheduleId，修复同名同节不同天提醒互相覆盖
+- 课程提醒: 从"打开今日页后固定 5 分钟"改为按 `上课时间-5分钟` 精确调度，早开 App 不再提前 6 小时收到通知
+- 通知开关: 状态持久化到 SharedPreferences（NotificationPrefs）；关闭时取消全部已排提醒，重新开启后自动恢复
+- 删除考试: 同步取消对应 WorkManager 任务，已删除考试的提醒不再弹出
+- NotificationHelper: 通知 ID 从名称 hashCode 改为 scheduleId/examId，同名课程通知不再互相覆盖
+
+### 今日页与周课表
+- TodayViewModel: 新增 30s ticker，todayMillis/dayOfWeek 实时计算，跨午夜自动刷新"今日"课程
+- TodayViewModel: 合并 ticker 进 combine，当前课程状态（即将开始/进行中/已结束）实时转换
+- WeekSwitcherState: 硬编码 20 周改为传入 totalWeeks，超过 20 周不再回跳；pendingSwipes 计数修正
+- WeekGrid: 重叠课程块半宽并排显示，不再完全遮罩
+- 编辑课程: 教室名从数据库 roomId 正确回填，不再永远为空
+
+### 交互与详情
+- MainActivity: 接线课程点击 → CourseDetailSheet（课程详情：教室/教师/周数/时间安排）
+- 新增 CourseDetailViewModel 加载课程详情数据
+- SemesterSetupDialog: 删除学期预设增加确认对话框
+- SemesterSetupDialog: 年份选择从硬编码 2024..2030 改为动态范围（当前年-2 ~ +8）
+- WeekScreen/TodayScreen: 实现 onLoadPreset，加载预设配置应用到当前学期
+- BottomNavBar: 横滑切页从单帧增量阈值改为累计拖动距离，滑动切换恢复可用
+
+### 输入校验与边界
+- AddCourseDialog/EditCourseDialog: 周数范围(1~totalWeeks)与起周≤止周校验，阻止产生永不可见课程
+- DateUtils: getWeekNumber 学期开始前返回 0 的问题修复为至少 1
+- AddExamDialog: SnapWheel 居中滚动偏移统一为 px 计算，高密度设备选中项正常居中
+- WeekGrid: weekDays 非法值(6)时表头列数对齐修复
+
+### 数据层与清理
+- Room: rooms.name 添加 UNIQUE 约束（v7 迁移，先合并重复行再建唯一索引）
+- insertRoom/updateRoom: 查重复用已有教室，避免 UNIQUE 冲突崩溃
+- 数据库: exportSchema=true + ksp schemaLocation，迁移变更可自动化校验（app/schemas/）
+- 清理死代码: BottomPageIndicator、getFlowByCourse、countWeekendSchedules、getAllSync、deleteById、getExpired、getCount、weeklyCourseCount
+
+---
+
+## v2.5 (2026-06-10)
+
+### 迁移崩溃修复
+- 数据库: v5→v6，MIGRATION_5_6 修复早期 v5 构建遗留的错误索引名 (idx_*)，重建正确的 Room 索引
+- 修复索引名不匹配导致的启动闪退
+
+### 自定义 App 图标
+- 基于设计源 PNG 生成 5 套密度图标（ic_launcher + ic_launcher_round）
+
+### 考试提醒修复
+- ExamReminderWorker: delayMillis<=0 立即触发；传 exam_millis 运行时重算剩余时间
+- Worker 内检查通知权限，无权限静默跳过
+
+---
+
 ## v2.4 (2026-06-19)
 
 ### 性能优化

@@ -63,18 +63,22 @@ class CourseRepository @Inject constructor(
     suspend fun deleteCourse(course: Course) = courseDao.delete(course)
 
     fun getSchedulesBySemester(semesterId: Long): Flow<List<Schedule>> = scheduleDao.getBySemester(semesterId)
+    suspend fun getSchedulesByCourse(courseId: Long): List<Schedule> = scheduleDao.getByCourse(courseId)
     suspend fun insertSchedule(schedule: Schedule): Long = scheduleDao.insert(schedule)
     suspend fun updateSchedule(schedule: Schedule) = scheduleDao.update(schedule)
     suspend fun deleteSchedule(schedule: Schedule) = scheduleDao.delete(schedule)
     suspend fun deleteSchedulesByCourseId(courseId: Long) = scheduleDao.deleteByCourseId(courseId)
 
-    suspend fun hasWeekendCourses(semesterId: Long): Boolean = scheduleDao.countWeekendSchedules(semesterId) > 0
-
-    suspend fun insertRoom(room: Room): Long = roomDao.insert(room)
+    suspend fun insertRoom(room: Room): Long =
+        roomDao.getByName(room.name)?.id ?: roomDao.insert(room)
     fun getAllRooms(): Flow<List<Room>> = roomDao.getAll()
     suspend fun getRoomById(id: Long): Room? = roomDao.getById(id)
-    suspend fun updateRoom(roomId: Long, newName: String) {
+
+    /** 改名教室；若新名字已被其他教室占用则直接复用该教室 id，避免 UNIQUE 冲突 */
+    suspend fun updateRoom(roomId: Long, newName: String): Long {
+        roomDao.getByName(newName)?.let { return it.id }
         roomDao.getById(roomId)?.let { r: Room -> roomDao.update(r.copy(name = newName)) }
+        return roomId
     }
 
     fun getExamsBySemester(semesterId: Long): Flow<List<Exam>> = examDao.getBySemester(semesterId)

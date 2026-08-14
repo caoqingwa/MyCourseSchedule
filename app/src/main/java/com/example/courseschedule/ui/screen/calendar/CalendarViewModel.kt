@@ -9,6 +9,8 @@ import com.example.courseschedule.data.db.entity.Exam
 import com.example.courseschedule.data.db.entity.Semester
 import com.example.courseschedule.data.repository.CourseRepository
 import com.example.courseschedule.util.DateUtils
+import com.example.courseschedule.util.NotificationPrefs
+import com.example.courseschedule.worker.CourseReminderWorker
 import com.example.courseschedule.worker.ExamReminderWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -33,15 +35,12 @@ class CalendarViewModel @Inject constructor(
         val todayMillis: Long = System.currentTimeMillis(),
         val exams: List<Exam> = emptyList(),
         val courses: List<Course> = emptyList(),
-        val weeklyCourseCount: List<Int> = listOf(0,0,0,0,0),
         val notificationsEnabled: Boolean = true
     )
 
-    private val _notificationsEnabled = MutableStateFlow(true)
-
     val uiState: StateFlow<CalendarUiState> = combine(
         repository.getCurrentSemester(),
-        _notificationsEnabled
+        NotificationPrefs.enabled
     ) { semester, enabled -> semester to enabled }
     .flatMapLatest { (semester, enabled) ->
         if (semester == null) {
@@ -49,17 +48,11 @@ class CalendarViewModel @Inject constructor(
         } else {
             combine(
                 repository.getExamsBySemester(semester.id),
-                repository.getCoursesBySemester(semester.id),
-                repository.getSchedulesBySemester(semester.id)
-            ) { exams, courses, schedules ->
+                repository.getCoursesBySemester(semester.id)
+            ) { exams, courses ->
                 val now = System.currentTimeMillis()
                 val week = DateUtils.getWeekNumber(now, semester.startDate)
                 val dow = DateUtils.getDayOfWeek(now)
-                val counts = (1..semester.weekDays).map { day ->
-                    schedules.count {
-                        it.dayOfWeek == day && DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, week)
-                    }
-                }
                 CalendarUiState(
                     semester = semester,
                     currentWeek = week,
@@ -67,7 +60,6 @@ class CalendarViewModel @Inject constructor(
                     todayMillis = now,
                     exams = exams,
                     courses = courses,
-                    weeklyCourseCount = counts,
                     notificationsEnabled = enabled
                 )
             }
@@ -79,11 +71,15 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun setNotificationsEnabled(enabled: Boolean) {
-        _notificationsEnabled.value = enabled
+        NotificationPrefs.setEnabled(enabled)
         if (enabled) {
             viewModelScope.launch {
                 ExamReminderWorker.rescheduleAll(appContext, repository.getExamDao())
             }
+        } else {
+            // 关闭时取消所有已排定的课程/考试提醒
+            CourseReminderWorker.cancelAll(appContext)
+            ExamReminderWorker.cancelAll(appContext)
         }
     }
 
@@ -91,7 +87,7 @@ class CalendarViewModel @Inject constructor(
         val examId = repository.insertExam(
             Exam(courseId = courseId, examDate = examDate, reminderHours = reminderHours, notes = notes)
         )
-        if (_notificationsEnabled.value) {
+        if (NotificationPrefs.isEnabled()) {
             ExamReminderWorker.schedule(appContext, notes ?: "\u8003\u8bd5", examDate, reminderHours, examId)
         }
         return examId
@@ -100,13 +96,16 @@ class CalendarViewModel @Inject constructor(
     fun updateExam(exam: Exam) {
         viewModelScope.launch {
             repository.updateExam(exam)
-            if (_notificationsEnabled.value) {
+            if (NotificationPrefs.isEnabled()) {
                 ExamReminderWorker.schedule(appContext, exam.notes ?: "\u8003\u8bd5", exam.examDate, exam.reminderHours, exam.id)
             }
         }
     }
 
     fun deleteExam(exam: Exam) {
-        viewModelScope.launch { repository.deleteExam(exam) }
+        viewModelScope.launch {
+            repository.deleteExam(exam)
+            ExamReminderWorker.cancel(appContext, exam.id)
+        }
     }
 }

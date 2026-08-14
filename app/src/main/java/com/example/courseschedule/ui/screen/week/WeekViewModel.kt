@@ -196,7 +196,7 @@ class WeekViewModel @Inject constructor(
         viewModelScope.launch {
             val course = repository.getCourseById(courseId) ?: return@launch
             val roomId = if (room.isNotBlank()) {
-                course.roomId?.let { repository.updateRoom(it, room); it }
+                course.roomId?.let { repository.updateRoom(it, room) }
                     ?: repository.insertRoom(Room(name = room))
             } else course.roomId
             repository.updateCourse(course.copy(name = name, teacher = teacher, roomId = roomId))

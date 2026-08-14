@@ -1,4 +1,4 @@
-﻿package com.example.courseschedule.ui.screen.detail
+package com.example.courseschedule.ui.screen.detail
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,7 +37,7 @@ fun CourseDetailSheet(
             } ?: "\u5f85\u914d\u7f6e"
             DetailRow(icon = "\ud83d\udcc5", label = "\u8bfe\u7a0b\u5468\u6570", value = weekInfo)
 
-            val dayNames = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94")
+            val dayNames = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d", "\u5468\u65e5")
             val scheduleInfo = schedules.joinToString(", ") {
                 dayNames.getOrElse(it.dayOfWeek - 1) { "?" } + " " + it.startPeriod + "-" + it.endPeriod + "\u8282"
             }

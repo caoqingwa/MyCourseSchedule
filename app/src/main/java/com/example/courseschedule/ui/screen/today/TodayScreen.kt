@@ -18,6 +18,7 @@ import com.example.courseschedule.ui.component.CourseCard
 import com.example.courseschedule.ui.component.CourseScheduleTopBar
 import com.example.courseschedule.ui.component.SemesterSetupDialog
 import com.example.courseschedule.util.DateUtils
+import com.example.courseschedule.util.NotificationPrefs
 import com.example.courseschedule.worker.CourseReminderWorker
 import java.text.SimpleDateFormat
 import java.util.*
@@ -35,13 +36,32 @@ fun TodayScreen(
     var showSemesterDialog by remember { mutableStateOf(false) }
 
     val scheduledCourses = remember { mutableSetOf<Long>() }
-    LaunchedEffect(state.upcomingCourses) {
+    val notificationsEnabled by NotificationPrefs.enabled.collectAsStateWithLifecycle()
+    LaunchedEffect(state.upcomingCourses, state.semester, notificationsEnabled) {
+        if (!notificationsEnabled) {
+            scheduledCourses.clear()
+            return@LaunchedEffect
+        }
+        val now = System.currentTimeMillis()
+        val periodTimes = state.semester?.getPeriodTimes().orEmpty()
         state.upcomingCourses.forEach { cws ->
-            val key = cws.course.id * 1000 + cws.schedule.startPeriod
-            if (scheduledCourses.add(key)) {
-                val roomName = cws.roomName ?: ""
-                val periodStr = "\u7b2c" + cws.schedule.startPeriod + "-" + cws.schedule.endPeriod + "\u8282"
-                CourseReminderWorker.schedule(viewModel.context, cws.course.name, roomName, periodStr, 5)
+            val scheduleId = cws.schedule.id
+            if (scheduledCourses.add(scheduleId)) {
+                val startTime = periodTimes.getOrNull(cws.schedule.startPeriod - 1)?.start
+                    ?.split(":")?.let { (h, m) ->
+                        Calendar.getInstance().apply {
+                            timeInMillis = now
+                            set(Calendar.HOUR_OF_DAY, h.toIntOrNull() ?: 0)
+                            set(Calendar.MINUTE, m.toIntOrNull() ?: 0)
+                            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                        }.timeInMillis
+                    } ?: return@forEach
+                val delayMillis = startTime - 5 * 60_000L - now
+                if (delayMillis > 0) {
+                    val roomName = cws.roomName ?: ""
+                    val periodStr = "\u7b2c" + cws.schedule.startPeriod + "-" + cws.schedule.endPeriod + "\u8282"
+                    CourseReminderWorker.schedule(viewModel.context, cws.course.name, roomName, periodStr, delayMillis, scheduleId)
+                }
             }
         }
     }
@@ -120,7 +140,7 @@ fun TodayScreen(
                 }
                 itemsIndexed(
                     items = state.upcomingCourses,
-                    key = { _, item -> item.course.id * 1000 + item.schedule.startPeriod }
+                    key = { _, item -> item.schedule.id }
                 ) { idx, item ->
                     CourseCard(item, isCurrent = false, nextInfo = nextInfoList[idx], onClick = { onCourseClick(item.course.id) })
                 }
@@ -139,7 +159,9 @@ fun TodayScreen(
                 viewModel.saveSemester(name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson)
                 showSemesterDialog = false
             },
-            onLoadPreset = { },
+            onLoadPreset = { preset ->
+                viewModel.saveSemester(preset.name, preset.startDate, preset.totalWeeks, preset.periodCount, preset.weekDays, preset.periodTimesJson)
+            },
             onDeletePreset = { viewModel.deletePreset(it) }
         )
     }

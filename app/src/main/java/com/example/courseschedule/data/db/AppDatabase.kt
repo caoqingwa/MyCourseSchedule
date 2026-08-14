@@ -9,8 +9,8 @@ import com.example.courseschedule.data.db.entity.*
 
 @Database(
     entities = [Semester::class, Course::class, Schedule::class, Room::class, Exam::class],
-    version = 6,
-    exportSchema = false
+    version = 7,
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun semesterDao(): SemesterDao
@@ -20,6 +20,11 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun examDao(): ExamDao
 
     companion object {
+        // v1 与 v2 实体结构相同，仅补链，保证老用户可从版本 1 平滑升级
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {}
+        }
+
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""
@@ -32,9 +37,10 @@ abstract class AppDatabase : RoomDatabase() {
                         FOREIGN KEY (courseId) REFERENCES courses(id) ON DELETE CASCADE
                     )
                 """)
+                // v1/v2 的提醒单位为天，按 24 小时换算保留用户配置（NULL 视为默认 2 天）
                 db.execSQL("""
                     INSERT INTO exams_new (id, courseId, examDate, reminderHours, notes)
-                    SELECT id, courseId, examDate, 48, notes FROM exams
+                    SELECT id, courseId, examDate, COALESCE(reminderDays, 2) * 24, notes FROM exams
                 """)
                 db.execSQL("DROP TABLE exams")
                 db.execSQL("ALTER TABLE exams_new RENAME TO exams")
@@ -64,6 +70,14 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_courses_semesterId ON courses(semesterId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_schedules_courseId ON schedules(courseId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_exams_courseId ON exams(courseId)")
+            }
+        }
+
+        // rooms.name 加唯一约束：先合并重复行（保留最小 id），再建唯一索引
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DELETE FROM rooms WHERE id NOT IN (SELECT MIN(id) FROM rooms GROUP BY name)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_rooms_name ON rooms(name)")
             }
         }
     }

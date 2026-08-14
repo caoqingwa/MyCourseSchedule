@@ -62,6 +62,7 @@ fun SemesterSetupDialog(
     }
 
     var showPresetList by remember { mutableStateOf(false) }
+    var presetToDelete by remember { mutableStateOf<Semester?>(null) }
     var editingPeriodIndex by remember { mutableIntStateOf(-1) }
     var editStartHour by remember { mutableIntStateOf(8) }
     var editStartMin by remember { mutableIntStateOf(0) }
@@ -76,6 +77,23 @@ fun SemesterSetupDialog(
     }
     LaunchedEffect(maxDaysInMonth) {
         if (selectedDay > maxDaysInMonth) selectedDay = maxDaysInMonth
+    }
+
+    presetToDelete?.let { preset ->
+        AlertDialog(
+            onDismissRequest = { presetToDelete = null },
+            title = { Text("\u5220\u9664\u9884\u8bbe") },
+            text = { Text("\u786e\u5b9a\u5220\u9664\u9884\u8bbe\u300c${preset.name}\u300d\u5417\uff1f\u6b64\u64cd\u4f5c\u4e0d\u53ef\u64a4\u9500\u3002") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDeletePreset(preset)
+                    presetToDelete = null
+                }) { Text("\u5220\u9664", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { presetToDelete = null }) { Text("\u53d6\u6d88") }
+            }
+        )
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -120,7 +138,7 @@ fun SemesterSetupDialog(
                             ) {
                                 Text(preset.name, fontSize = 13.sp, modifier = Modifier.weight(1f))
                                 TextButton(onClick = { onLoadPreset(preset) }) { Text("\u52a0\u8f7d", fontSize = 12.sp) }
-                                IconButton(onClick = { onDeletePreset(preset) }, modifier = Modifier.size(28.dp)) {
+                                IconButton(onClick = { presetToDelete = preset }, modifier = Modifier.size(28.dp)) {
                                     Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                                 }
                             }
@@ -145,8 +163,13 @@ fun SemesterSetupDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ScrollNumberPicker(value = selectedYear, range = 2024..2030, label = "\u5e74",
-                    onValueChange = { selectedYear = it }, modifier = Modifier.weight(1f))
+                ScrollNumberPicker(
+                    value = selectedYear,
+                    range = (cal.get(Calendar.YEAR) - 2)..(cal.get(Calendar.YEAR) + 8),
+                    label = "\u5e74",
+                    onValueChange = { selectedYear = it },
+                    modifier = Modifier.weight(1f)
+                )
                 ScrollNumberPicker(value = selectedMonth, range = 1..12, label = "\u6708",
                     onValueChange = { selectedMonth = it }, modifier = Modifier.weight(1f))
                 ScrollNumberPicker(value = selectedDay, range = 1..maxDaysInMonth, label = "\u65e5",

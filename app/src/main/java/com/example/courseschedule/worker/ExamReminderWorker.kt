@@ -40,7 +40,7 @@ class ExamReminderWorker @AssistedInject constructor(
             return Result.success()
         }
 
-        NotificationHelper.showExamReminder(applicationContext, examName, hoursLeft)
+        NotificationHelper.showExamReminder(applicationContext, examName, hoursLeft, examId.toInt())
         return Result.success()
     }
 
@@ -64,6 +64,14 @@ class ExamReminderWorker @AssistedInject constructor(
                 ExistingWorkPolicy.REPLACE,
                 request
             )
+        }
+
+        fun cancel(context: Context, examId: Long) {
+            WorkManager.getInstance(context).cancelUniqueWork("exam_reminder_$examId")
+        }
+
+        fun cancelAll(context: Context) {
+            WorkManager.getInstance(context).cancelAllWork()
         }
 
         suspend fun rescheduleAll(context: Context, examDao: ExamDao) {

@@ -27,7 +27,7 @@ object NotificationHelper {
         } else true
     }
 
-    fun showCourseReminder(context: Context, courseName: String, roomName: String, period: String) {
+    fun showCourseReminder(context: Context, courseName: String, roomName: String, period: String, notificationId: Int) {
         if (!hasNotificationPermission(context)) return
         val notification = NotificationCompat.Builder(context, CHANNEL_COURSE)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -38,11 +38,11 @@ object NotificationHelper {
             .setAutoCancel(true)
             .build()
         try {
-            NotificationManagerCompat.from(context).notify(courseName.hashCode(), notification)
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
         } catch (_: SecurityException) {}
     }
 
-    fun showExamReminder(context: Context, examName: String, hoursUntilExam: Int) {
+    fun showExamReminder(context: Context, examName: String, hoursUntilExam: Int, notificationId: Int) {
         if (!hasNotificationPermission(context)) return
         val timeText = when {
             hoursUntilExam >= 48 -> (hoursUntilExam / 24).toString() + " \u5929"
@@ -59,7 +59,7 @@ object NotificationHelper {
             .setAutoCancel(true)
             .build()
         try {
-            NotificationManagerCompat.from(context).notify(examName.hashCode() + 10000, notification)
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
         } catch (_: SecurityException) {}
     }
 }

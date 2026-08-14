@@ -18,25 +18,34 @@ class CourseReminderWorker @AssistedInject constructor(
         val courseName = inputData.getString("course_name") ?: return Result.failure()
         val roomName = inputData.getString("room_name") ?: ""
         val period = inputData.getString("period") ?: ""
-        NotificationHelper.showCourseReminder(applicationContext, courseName, roomName, period)
+        val scheduleId = inputData.getLong("schedule_id", -1L)
+        NotificationHelper.showCourseReminder(applicationContext, courseName, roomName, period, scheduleId.toInt())
         return Result.success()
     }
 
     companion object {
         private const val UNIQUE_PREFIX = "course_reminder_"
 
-        fun schedule(context: Context, courseName: String, roomName: String, period: String, delayMinutes: Long) {
-            val data = workDataOf("course_name" to courseName, "room_name" to roomName, "period" to period)
+        fun schedule(context: Context, courseName: String, roomName: String, period: String, delayMillis: Long, scheduleId: Long) {
+            val data = workDataOf(
+                "course_name" to courseName, "room_name" to roomName,
+                "period" to period, "schedule_id" to scheduleId
+            )
             val request = OneTimeWorkRequestBuilder<CourseReminderWorker>()
                 .setInputData(data)
-                .setInitialDelay(delayMinutes, TimeUnit.MINUTES)
+                .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
                 .build()
-            val uniqueName = "$UNIQUE_PREFIX${courseName}_$period"
+            // scheduleId 唯一，避免同名同节不同天的提醒互相覆盖
+            val uniqueName = "$UNIQUE_PREFIX$scheduleId"
             WorkManager.getInstance(context).enqueueUniqueWork(
                 uniqueName,
                 ExistingWorkPolicy.REPLACE,
                 request
             )
+        }
+
+        fun cancelAll(context: Context) {
+            WorkManager.getInstance(context).cancelAllWork()
         }
     }
 }

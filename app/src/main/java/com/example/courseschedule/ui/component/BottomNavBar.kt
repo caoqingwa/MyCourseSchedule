@@ -46,16 +46,20 @@ fun BottomNavBar(
             .clip(RoundedCornerShape(20.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .pointerInput(currentIndex, screens.size) {
+                var accumulatedDrag = 0f
                 detectHorizontalDragGestures(
-                    onDragEnd = {},
-                    onDragCancel = {},
+                    onDragStart = { accumulatedDrag = 0f },
+                    onDragEnd = { accumulatedDrag = 0f },
+                    onDragCancel = { accumulatedDrag = 0f },
                     onHorizontalDrag = { _, dragAmount ->
-                        if (kotlin.math.abs(dragAmount) > thresholdPx) {
-                            if (dragAmount < 0 && currentIndex < screens.lastIndex) {
+                        accumulatedDrag += dragAmount
+                        if (kotlin.math.abs(accumulatedDrag) > thresholdPx) {
+                            if (accumulatedDrag < 0 && currentIndex < screens.lastIndex) {
                                 onNavigate(screens[currentIndex + 1])
-                            } else if (dragAmount > 0 && currentIndex > 0) {
+                            } else if (accumulatedDrag > 0 && currentIndex > 0) {
                                 onNavigate(screens[currentIndex - 1])
                             }
+                            accumulatedDrag = 0f
                         }
                     }
                 )

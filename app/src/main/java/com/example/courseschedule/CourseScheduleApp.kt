@@ -7,6 +7,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.example.courseschedule.data.db.dao.ExamDao
 import com.example.courseschedule.data.repository.CourseRepository
+import com.example.courseschedule.util.NotificationPrefs
 import com.example.courseschedule.worker.ExamReminderWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +32,7 @@ class CourseScheduleApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        NotificationPrefs.init(this)
         createNotificationChannels()
         appScope.launch {
             repository.initDefaultSemester()

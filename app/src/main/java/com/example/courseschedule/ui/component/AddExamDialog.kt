@@ -288,9 +288,9 @@ private fun SnapWheel(
                     val itemOffset = listState.layoutInfo.visibleItemsInfo
                         .find { it.index == target }?.offset ?: return@collect
                     val viewportHeight = listState.layoutInfo.viewportEndOffset - listState.layoutInfo.viewportStartOffset
-                    val targetOffset = itemOffset - (viewportHeight / 2) + (listState.layoutInfo.visibleItemsInfo.find { it.index == target }?.size ?: ITEM_HEIGHT) / 2
-                    if (abs(itemOffset - (viewportHeight / 2)) > 2) {
-                        listState.animateScrollToItem(target, scrollOffset = -(ITEM_HEIGHT / 2))
+                    // contentPadding 顶部已预留一个 item 高度，scrollOffset=0 即居中
+                    if (abs(itemOffset - viewportHeight / 2) > 2) {
+                        listState.animateScrollToItem(target, scrollOffset = 0)
                     }
                 }
             }
@@ -298,10 +298,8 @@ private fun SnapWheel(
 
     // Scroll to selected when externally changed
     LaunchedEffect(selected) {
-        listState.animateScrollToItem(selected, scrollOffset = -(ITEM_HEIGHT / 2))
+        listState.animateScrollToItem(selected, scrollOffset = 0)
     }
-
-    val paddingDp = with(androidx.compose.ui.platform.LocalDensity.current) { (ITEM_HEIGHT * 1).toDp() }
 
     Box(modifier = modifier.height(ITEM_HEIGHT.dp * 3)) {
         // Center highlight

@@ -2,7 +2,7 @@
 
 一款轻量化的安卓端大学课程表应用，支持每日/每周课表查看、考试提醒、日历总览，支持5天制和7天制课表。
 
-> **当前版本**: v2.4 (2026-07-23)  
+> **当前版本**: v2.6 (2026-06-11)  
 > **最低 Android 版本**: 8.0 (API 26)  
 > **技术栈**: Kotlin + Jetpack Compose + Room + Hilt
 
@@ -56,7 +56,7 @@
 app/
 ├── data/
 │   ├── db/
-│   │   ├── AppDatabase.kt          # Room 数据库 (v3)
+│   │   ├── AppDatabase.kt          # Room 数据库 (v7)
 │   │   ├── entity/                  # Semester, Course, Schedule, Room, Exam
 │   │   └── dao/                     # 数据访问对象
 │   └── repository/
@@ -65,12 +65,14 @@ app/
 │   ├── screen/
 │   │   ├── today/                   # 今日课程页
 │   │   ├── week/                    # 周课表页
-│   │   └── calendar/               # 日历总览页
+│   │   ├── calendar/               # 日历总览页
+│   │   └── detail/                 # 课程详情页
 │   ├── component/                   # 可复用组件
 │   └── theme/                       # Material3 主题
 ├── util/
 │   ├── DateUtils.kt                 # 日期计算工具
-│   └── NotificationHelper.kt       # 通知管理
+│   ├── NotificationHelper.kt       # 通知管理
+│   └── NotificationPrefs.kt        # 通知开关持久化
 ├── worker/
 │   ├── CourseReminderWorker.kt     # 课程提醒
 │   └── ExamReminderWorker.kt       # 考试提醒
@@ -100,6 +102,8 @@ app/
 
 | 版本 | 日期 | 主要更新 |
 |------|------|----------|
+| v2.6 | 2026-06-11 | 全面修复：重复key崩溃、MIGRATION_1_2、提醒系统重构（精确调度/开关持久化）、课程详情接线、30s实时刷新、输入校验、Room唯一约束 |
+| v2.5 | 2026-06-10 | 迁移索引名崩溃修复、自定义App图标、考试提醒立即触发修复 |
 | v2.4 | 2026-07-23 | 深度性能优化：线程安全修复、Room索引、DAO JOIN、JSON解析缓存、Compose重组优化 |
 | v2.3 | 2026-06-19 | 底部导航栏滑动切换、HSL课程颜色系统（同名同色、不同名不同色）、release lint修复 |
 | v2.2 | 2026-06-19 | 周课表日期行、节次列显示月份 |

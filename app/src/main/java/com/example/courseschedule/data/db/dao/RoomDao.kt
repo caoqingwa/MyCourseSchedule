@@ -1,4 +1,4 @@
-﻿package com.example.courseschedule.data.db.dao
+package com.example.courseschedule.data.db.dao
 
 import androidx.room.*
 import com.example.courseschedule.data.db.entity.Room
@@ -11,6 +11,9 @@ interface RoomDao {
 
     @Query("SELECT * FROM rooms WHERE id = :id")
     suspend fun getById(id: Long): Room?
+
+    @Query("SELECT * FROM rooms WHERE name = :name LIMIT 1")
+    suspend fun getByName(name: String): Room?
 
     @Insert
     suspend fun insert(room: Room): Long

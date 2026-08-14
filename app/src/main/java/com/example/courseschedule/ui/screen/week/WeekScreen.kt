@@ -85,6 +85,7 @@ fun WeekScreen(
             switcherState.animateSwitch(
                 fromWeek = state.selectedWeek,
                 toWeek = clamped,
+                totalWeeks = state.totalWeeks,
                 screenWidthPx = screenWidthPx,
                 onSwap = { viewModel.selectWeek(clamped) }
             )
@@ -214,7 +215,7 @@ fun WeekScreen(
         EditCourseDialog(
             courseName = course.name,
             courseTeacher = course.teacher,
-            courseRoom = "",
+            courseRoom = course.roomId?.let { state.currentPage.roomMap[it] } ?: "",
             dayOfWeek = sched.dayOfWeek,
             startPeriod = sched.startPeriod,
             endPeriod = sched.endPeriod,
@@ -250,7 +251,9 @@ fun WeekScreen(
                 viewModel.saveSemester(name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson)
                 showSemesterDialog = false
             },
-            onLoadPreset = { },
+            onLoadPreset = { preset ->
+                viewModel.saveSemester(preset.name, preset.startDate, preset.totalWeeks, preset.periodCount, preset.weekDays, preset.periodTimesJson)
+            },
             onDeletePreset = { viewModel.deletePreset(it) }
         )
     }
@@ -279,6 +282,7 @@ private class WeekSwitcherState {
     suspend fun animateSwitch(
         fromWeek: Int,
         toWeek: Int,
+        totalWeeks: Int,
         screenWidthPx: Float,
         onSwap: () -> Unit
     ) {
@@ -306,7 +310,7 @@ private class WeekSwitcherState {
         if (pendingSwipes != 0) {
             val remaining = pendingSwipes
             pendingSwipes = 0
-            val next = (toWeek + remaining).coerceIn(1, 20)
+            val next = (toWeek + remaining).coerceIn(1, totalWeeks)
             if (next != toWeek) lastTarget = next
         }
     }

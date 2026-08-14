@@ -15,7 +15,7 @@ object DateUtils {
         val startMonday = toMonday(semesterStartMillis)
         val dateMonday = toMonday(dateMillis)
         val daysDiff = (dateMonday - startMonday) / MILLIS_PER_DAY
-        return (daysDiff / 7).toInt() + 1
+        return ((daysDiff / 7).toInt() + 1).coerceAtLeast(1)
     }
 
     private fun toMonday(dateMillis: Long): Long {

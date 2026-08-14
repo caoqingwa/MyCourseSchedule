@@ -48,6 +48,12 @@ fun AddCourseDialog(
             (epVal != null && (epVal < 1 || epVal > periodCount)) ||
             (spVal != null && epVal != null && spVal > epVal)
 
+    val swVal = startWeek.toIntOrNull()
+    val ewVal = endWeek.toIntOrNull()
+    val weekError = (swVal != null && (swVal < 1 || swVal > totalWeeks)) ||
+            (ewVal != null && (ewVal < 1 || ewVal > totalWeeks)) ||
+            (swVal != null && ewVal != null && swVal > ewVal)
+
     if (showConflictWarning) {
         AlertDialog(
             onDismissRequest = { showConflictWarning = false },
@@ -126,12 +132,28 @@ fun AddCourseDialog(
                     OutlinedTextField(
                         value = startWeek, onValueChange = { startWeek = it.filter { c -> c.isDigit() } },
                         label = { Text("\u8d77\u5468") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.weight(1f)
+                        singleLine = true, modifier = Modifier.weight(1f),
+                        isError = swVal != null && (swVal < 1 || swVal > totalWeeks),
+                        supportingText = if (swVal != null && (swVal < 1 || swVal > totalWeeks)) {
+                            { Text("\u9650\u5236: 1~$totalWeeks\u5468", fontSize = 11.sp) }
+                        } else null
                     )
                     OutlinedTextField(
                         value = endWeek, onValueChange = { endWeek = it.filter { c -> c.isDigit() } },
                         label = { Text("\u6b63\u5468") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.weight(1f)
+                        singleLine = true, modifier = Modifier.weight(1f),
+                        isError = ewVal != null && (ewVal < 1 || ewVal > totalWeeks),
+                        supportingText = if (ewVal != null && (ewVal < 1 || ewVal > totalWeeks)) {
+                            { Text("\u9650\u5236: 1~$totalWeeks\u5468", fontSize = 11.sp) }
+                        } else null
+                    )
+                }
+                if (swVal != null && ewVal != null && swVal > ewVal) {
+                    Text(
+                        "\u8d77\u5468\u4e0d\u80fd\u5927\u4e8e\u6b63\u5468",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -166,7 +188,7 @@ fun AddCourseDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                    if (name.isBlank()) { nameError = true } else if (periodError) { /* no-op, errors shown inline */ } else {
+                    if (name.isBlank()) { nameError = true } else if (periodError || weekError) { /* no-op, errors shown inline */ } else {
                     if (conflicts.isEmpty()) {
                         onConfirm(name.trim(), teacher.trim(), room.trim(), weekTypeIndex,
                             (startWeek.toIntOrNull() ?: currentWeek).coerceAtLeast(1),
@@ -220,6 +242,12 @@ fun EditCourseDialog(
     val periodError = (spVal != null && (spVal < 1 || spVal > periodCount)) ||
             (epVal != null && (epVal < 1 || epVal > periodCount)) ||
             (spVal != null && epVal != null && spVal > epVal)
+
+    val swVal = sWeek.toIntOrNull()
+    val ewVal = eWeek.toIntOrNull()
+    val weekError = (swVal != null && (swVal < 1 || swVal > totalWeeks)) ||
+            (ewVal != null && (ewVal < 1 || ewVal > totalWeeks)) ||
+            (swVal != null && ewVal != null && swVal > ewVal)
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -277,12 +305,28 @@ fun EditCourseDialog(
                     OutlinedTextField(
                         value = sWeek, onValueChange = { sWeek = it.filter { c -> c.isDigit() } },
                         label = { Text("\u8d77\u5468") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.weight(1f)
+                        singleLine = true, modifier = Modifier.weight(1f),
+                        isError = swVal != null && (swVal < 1 || swVal > totalWeeks),
+                        supportingText = if (swVal != null && (swVal < 1 || swVal > totalWeeks)) {
+                            { Text("\u9650\u5236: 1~$totalWeeks\u5468", fontSize = 11.sp) }
+                        } else null
                     )
                     OutlinedTextField(
                         value = eWeek, onValueChange = { eWeek = it.filter { c -> c.isDigit() } },
                         label = { Text("\u6b63\u5468") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.weight(1f)
+                        singleLine = true, modifier = Modifier.weight(1f),
+                        isError = ewVal != null && (ewVal < 1 || ewVal > totalWeeks),
+                        supportingText = if (ewVal != null && (ewVal < 1 || ewVal > totalWeeks)) {
+                            { Text("\u9650\u5236: 1~$totalWeeks\u5468", fontSize = 11.sp) }
+                        } else null
+                    )
+                }
+                if (swVal != null && ewVal != null && swVal > ewVal) {
+                    Text(
+                        "\u8d77\u5468\u4e0d\u80fd\u5927\u4e8e\u6b63\u5468",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -317,7 +361,7 @@ fun EditCourseDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                if (name.isBlank()) { nameError = true } else if (!periodError) {
+                if (name.isBlank()) { nameError = true } else if (!periodError && !weekError) {
                     onConfirm(name.trim(), teacher.trim(), room.trim(), dayOfWeek, weekTypeIndex,
                         (sWeek.toIntOrNull() ?: startWeek).coerceAtLeast(1),
                         (eWeek.toIntOrNull() ?: endWeek).coerceAtLeast(1),

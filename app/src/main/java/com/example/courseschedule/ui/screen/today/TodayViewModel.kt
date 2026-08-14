@@ -12,6 +12,7 @@ import com.example.courseschedule.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.*
@@ -24,8 +25,12 @@ class TodayViewModel @Inject constructor(
     @ApplicationContext val context: Context
 ) : ViewModel() {
 
-    private val todayMillis = System.currentTimeMillis()
-    val dayOfWeek = DateUtils.getDayOfWeek(todayMillis)
+    private val ticker = flow {
+        while (true) {
+            emit(Unit)
+            delay(30_000)
+        }
+    }
 
     @Immutable
     data class TodayUiState(
@@ -51,18 +56,20 @@ class TodayViewModel @Inject constructor(
         combine(
             repository.getSchedulesBySemester(semester.id),
             repository.getCoursesBySemester(semester.id),
-            repository.getAllRooms()
-        ) { schedules, courses, rooms ->
+            repository.getAllRooms(),
+            ticker
+        ) { schedules, courses, rooms, _ ->
             val courseMap = courses.associateBy { it.id }
             val roomMap = rooms.associateBy({ it.id }, { it.name })
             Triple(schedules, courseMap, roomMap)
         }.map { (schedules, courseMap, roomMap) ->
-            val currentWeek = DateUtils.getWeekNumber(todayMillis, semester.startDate)
+            val now = System.currentTimeMillis()
+            val dayOfWeek = DateUtils.getDayOfWeek(now)
+            val currentWeek = DateUtils.getWeekNumber(now, semester.startDate)
             val activeSchedules = schedules.filter {
                 it.dayOfWeek == dayOfWeek && DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, currentWeek)
             }.sortedBy { it.startPeriod }
 
-            val now = System.currentTimeMillis()
             val periodTimes = semester.getPeriodTimes()
             val currentPeriod = DateUtils.getCurrentPeriod(semester)
 
@@ -80,14 +87,14 @@ class TodayViewModel @Inject constructor(
                 val endTime = if (endRange != null) {
                     val (h, m) = endRange.end.split(":").map { it.toIntOrNull() ?: 0 }
                     Calendar.getInstance().apply {
-                        timeInMillis = todayMillis; set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m)
+                        timeInMillis = now; set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m)
                         set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
                     }.timeInMillis
                 } else 0L
                 val startTime = if (startRange != null) {
                     val (h, m) = startRange.start.split(":").map { it.toIntOrNull() ?: 0 }
                     Calendar.getInstance().apply {
-                        timeInMillis = todayMillis; set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m)
+                        timeInMillis = now; set(Calendar.HOUR_OF_DAY, h); set(Calendar.MINUTE, m)
                         set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
                     }.timeInMillis
                 } else Long.MAX_VALUE
