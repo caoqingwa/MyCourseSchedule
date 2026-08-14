@@ -9,7 +9,7 @@ import com.example.courseschedule.data.db.entity.*
 
 @Database(
     entities = [Semester::class, Course::class, Schedule::class, Room::class, Exam::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -49,6 +49,18 @@ abstract class AppDatabase : RoomDatabase() {
 
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_courses_semesterId ON courses(semesterId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_schedules_courseId ON schedules(courseId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_exams_courseId ON exams(courseId)")
+            }
+        }
+
+        // 修复早期 v5 构建留下的错误索引名 (idx_*)，并确保正确的 Room 索引存在
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP INDEX IF EXISTS idx_courses_semester")
+                db.execSQL("DROP INDEX IF EXISTS idx_schedules_course")
+                db.execSQL("DROP INDEX IF EXISTS idx_exams_course")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_courses_semesterId ON courses(semesterId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_schedules_courseId ON schedules(courseId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_exams_courseId ON exams(courseId)")
