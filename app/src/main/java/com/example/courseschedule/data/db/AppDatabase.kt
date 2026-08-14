@@ -79,9 +79,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        // rooms.name 加唯一约束：先合并重复行（保留最小 id），再建唯一索引
+        // rooms.name 加唯一约束：先把引用"将被删除的重复行"的课程重定向到同名保留行，再删重复，最后建唯一索引
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
+                // 引用将被删除行的课程，改为指向同名的保留行（MIN id）
+                db.execSQL("""
+                    UPDATE courses SET roomId = (
+                        SELECT MIN(id) FROM rooms r2 WHERE r2.name = (
+                            SELECT name FROM rooms WHERE id = courses.roomId
+                        )
+                    ) WHERE roomId IN (
+                        SELECT id FROM rooms WHERE id NOT IN (SELECT MIN(id) FROM rooms GROUP BY name)
+                    )
+                """)
                 db.execSQL("DELETE FROM rooms WHERE id NOT IN (SELECT MIN(id) FROM rooms GROUP BY name)")
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_rooms_name ON rooms(name)")
             }

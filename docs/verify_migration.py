@@ -80,6 +80,13 @@ def m5_6(db):
         db.execute(sql)
 
 def m6_7(db):
+    db.execute("""UPDATE courses SET roomId = (
+        SELECT MIN(id) FROM rooms r2 WHERE r2.name = (
+            SELECT name FROM rooms WHERE id = courses.roomId
+        )
+    ) WHERE roomId IN (
+        SELECT id FROM rooms WHERE id NOT IN (SELECT MIN(id) FROM rooms GROUP BY name)
+    )""")
     db.execute("DELETE FROM rooms WHERE id NOT IN (SELECT MIN(id) FROM rooms GROUP BY name)")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS index_rooms_name ON rooms(name)")
 
@@ -107,6 +114,14 @@ def verify_final(cur, label):
         print(f'  [{label}] index {n}: {"OK" if n in idx else "MISSING"}')
         if n not in idx:
             ok = False
+    # 悬空引用断言：迁移后不允许存在指向不存在教室的课程
+    dangling = cur.execute('''
+        SELECT c.id FROM courses c LEFT JOIN rooms r ON c.roomId = r.id
+        WHERE c.roomId IS NOT NULL AND r.id IS NULL
+    ''').fetchall()
+    print(f'  [{label}] dangling room refs: {len(dangling)}')
+    if dangling:
+        ok = False
     return ok
 
 def run_case(name, version, setup_fn, seed_fn, run_migrations):
@@ -149,11 +164,12 @@ def setup_v6(db):
 
 def seed_v6(db):
     db.execute("INSERT INTO semesters (name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson) VALUES ('2025秋', 1700000000000, 20, 12, 5, ?)", (DEFAULT_TIMES_JSON,))
-    db.execute("INSERT INTO rooms (name) VALUES ('A101')")
-    db.execute("INSERT INTO rooms (name) VALUES ('A101')")  # 重复教室名
-    db.execute("INSERT INTO rooms (name) VALUES ('B202')")
+    db.execute("INSERT INTO rooms (name) VALUES ('A101')")   # id=1
+    db.execute("INSERT INTO rooms (name) VALUES ('A101')")   # id=2 重复（将被删除）
+    db.execute("INSERT INTO rooms (name) VALUES ('B202')")   # id=3
+    # 英语引用将被删除的 id=2，验证迁移会把引用重定向到 id=1
     db.execute("INSERT INTO courses (semesterId, name, teacher, color, roomId) VALUES (1, '高数', '王老师', '0', 1)")
-    db.execute("INSERT INTO courses (semesterId, name, teacher, color, roomId) VALUES (1, '英语', '李老师', '0', 3)")
+    db.execute("INSERT INTO courses (semesterId, name, teacher, color, roomId) VALUES (1, '英语', '李老师', '0', 2)")
     db.execute("INSERT INTO schedules (courseId, dayOfWeek, startPeriod, endPeriod, startWeek, endWeek, weekType) VALUES (1, 1, 1, 2, 1, 20, 0)")
     db.execute("INSERT INTO exams (courseId, examDate, reminderHours, notes) VALUES (1, 1750000000000, 48, '期中')")
 
