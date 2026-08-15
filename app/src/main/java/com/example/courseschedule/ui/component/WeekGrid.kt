@@ -1,10 +1,9 @@
 package com.example.courseschedule.ui.component
 
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,10 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +30,8 @@ import com.example.courseschedule.util.DateUtils
 
 private data class MergedBlock(val course: Course, val schedule: Schedule, val startPeriod: Int, val endPeriod: Int)
 private val FallbackColor = Color.Gray to Color.White
+// 课程块与网格线之间的垂直间隙（块首尾各留一半）；连堂块只在整块首尾留间隙，内部节间保持连续
+private val BlockGap = 4.dp
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -209,27 +207,7 @@ fun WeekGrid(
                 }
             }
 
-            // Draw grid lines in the course area only (right of period column)
-            Canvas(
-                modifier = Modifier
-                    .offset(x = periodColWidthDp, y = 0.dp)
-                    .size(colWidthDp.dp * colCount, gridBodyHeight)
-            ) {
-                val cellW = colWidthDp.dp.toPx()
-                val cellH = cellHeight.toPx()
-                val lineColor = borderColor
-
-                // Vertical lines (between columns)
-                for (col in 0..colCount) {
-                    val x = cellW * col
-                    drawLine(lineColor, Offset(x, 0f), Offset(x, cellH * totalPeriods), strokeWidth = 1.5f)
-                }
-                // Horizontal lines
-                for (row in 0..totalPeriods) {
-                    val y = cellH * row
-                    drawLine(lineColor, Offset(0f, y), Offset(cellW * colCount, y), strokeWidth = 1.5f)
-                }
-            }
+            // 内容区不绘制网格线，仅保留节次列边框与表头，课程块之间以间隙+颜色区分
 
             // Touch overlay — handles empty cell long-press, placed BEFORE course blocks
             // so course blocks (rendered after) are on top and receive events first
@@ -257,11 +235,13 @@ fun WeekGrid(
                 for (block in blocks) {
                     // 与前一块时间重叠时半宽并排，避免后画的块完全盖住先画的
                     val overlaps = block.startPeriod <= prevEnd
-                    val x = periodColWidthDp + colWidthDp.dp * col + if (overlaps) colWidthDp.dp * 0.5f else 0.dp
-                    val blockWidth = if (overlaps) colWidthDp.dp * 0.5f else colWidthDp.dp
-                    val y = cellHeight * (block.startPeriod - 1)
+                    val x = periodColWidthDp + colWidthDp.dp * col + BlockGap / 2 +
+                            if (overlaps) colWidthDp.dp * 0.5f else 0.dp
+                    val blockWidth = colWidthDp.dp - BlockGap -
+                            if (overlaps) colWidthDp.dp * 0.5f else 0.dp
+                    val y = cellHeight * (block.startPeriod - 1) + BlockGap / 2
                     val span = block.endPeriod - block.startPeriod + 1
-                    val blockHeight = cellHeight * span
+                    val blockHeight = cellHeight * span - BlockGap
                     val (bg, fg) = courseColorMap[block.course.name] ?: FallbackColor
                     prevEnd = maxOf(prevEnd, block.endPeriod)
 
