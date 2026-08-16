@@ -7,6 +7,7 @@ import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Room
 import com.example.courseschedule.data.db.entity.Schedule
 import com.example.courseschedule.data.db.entity.Semester
+import com.example.courseschedule.data.importer.ImportedCourse
 import com.example.courseschedule.data.repository.CourseRepository
 import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.util.DateUtils
@@ -213,6 +214,31 @@ class WeekViewModel @Inject constructor(
         viewModelScope.launch {
             repository.deleteCourseWithSchedules(courseId)
         }
+    }
+
+    /** 从 xlsx 解析出的课程批量导入当前学期，返回 (导入课程数, 导入时段数) */
+    suspend fun importParsedCourses(courses: List<ImportedCourse>): Pair<Int, Int> {
+        val semester = repository.getCurrentSemester().first() ?: return 0 to 0
+        var courseCount = 0
+        var scheduleCount = 0
+        for (course in courses) {
+            val schedPairs = course.schedules.map { s ->
+                Schedule(
+                    courseId = 0,
+                    dayOfWeek = s.dayOfWeek,
+                    startPeriod = s.startPeriod,
+                    endPeriod = s.endPeriod,
+                    startWeek = s.startWeek,
+                    endWeek = s.endWeek,
+                    weekType = s.weekType
+                ) to s.roomName
+            }
+            if (schedPairs.isEmpty()) continue
+            repository.importCourseWithSchedules(semester.id, course.name, course.teacher, schedPairs)
+            courseCount++
+            scheduleCount += schedPairs.size
+        }
+        return courseCount to scheduleCount
     }
 
     suspend fun checkConflict(

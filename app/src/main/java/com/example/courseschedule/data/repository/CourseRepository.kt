@@ -103,4 +103,23 @@ class CourseRepository @Inject constructor(
         scheduleDao.insert(schedule.copy(courseId = courseId))
         return courseId
     }
+
+    /** 批量导入：一个课程（含多个排课时段）在一个事务内插入；教室查重复用，课程 roomId 取首个时段教室 */
+    @Transaction
+    suspend fun importCourseWithSchedules(
+        semesterId: Long,
+        name: String,
+        teacher: String,
+        schedules: List<Pair<Schedule, String?>>
+    ): Long {
+        val firstRoom = schedules.firstOrNull()?.second
+        val roomId = firstRoom?.takeIf { it.isNotBlank() }?.let { insertRoom(Room(name = it)) }
+        val courseId = courseDao.insert(
+            Course(semesterId = semesterId, name = name, teacher = teacher, color = "0", roomId = roomId)
+        )
+        for ((sched, _) in schedules) {
+            scheduleDao.insert(sched.copy(courseId = courseId))
+        }
+        return courseId
+    }
 }
