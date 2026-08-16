@@ -33,6 +33,7 @@ import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Schedule
 import com.example.courseschedule.data.importer.ImportedCourse
 import com.example.courseschedule.data.importer.XlsxCourseParser
+import com.example.courseschedule.ui.screen.week.WeekViewModel.ImportConflict
 import com.example.courseschedule.ui.component.AddCourseDialog
 import com.example.courseschedule.ui.component.CourseScheduleTopBar
 import com.example.courseschedule.ui.component.EditCourseDialog
@@ -82,6 +83,7 @@ fun WeekScreen(
     var importError by remember { mutableStateOf<String?>(null) }
     var showImportConfirm by remember { mutableStateOf(false) }
     var parsedCourses by remember { mutableStateOf<List<ImportedCourse>>(emptyList()) }
+    var importConflicts by remember { mutableStateOf<List<ImportConflict>>(emptyList()) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val importLauncher = rememberLauncherForActivityResult(
@@ -96,6 +98,7 @@ fun WeekScreen(
                         importError = "\u672a\u89e3\u6790\u51fa\u6709\u6548\u8bfe\u7a0b\uff08\u8bf7\u786e\u8ba4\u8868\u683c\u5305\u542b\u201c\u8bfe\u7a0b\u540d\u79f0\u201d\u4e0e\u201c\u4e0a\u8bfe\u65f6\u95f4\u201d\u5217\uff09"
                     } else {
                         parsedCourses = courses
+                        importConflicts = viewModel.checkImportConflicts(courses)
                         showImportConfirm = true
                     }
                 } catch (e: Exception) {
@@ -107,6 +110,7 @@ fun WeekScreen(
 
     // 导入结果确认
     if (showImportConfirm && parsedCourses.isNotEmpty()) {
+        val conflictCount = importConflicts.size
         AlertDialog(
             onDismissRequest = { showImportConfirm = false },
             title = { Text("\u5bfc\u5165\u8bfe\u7a0b\u786e\u8ba4") },
@@ -123,20 +127,68 @@ fun WeekScreen(
                     if (parsedCourses.size > 8) {
                         Text("...\u7b49${parsedCourses.size}\u95e8", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    if (conflictCount > 0) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "\u26a0 \u4e0e\u5df2\u6709\u8bfe\u7a0b\u65f6\u95f4\u51b2\u7a81\u7684\u65f6\u6bb5 ${conflictCount} \u4e2a\uff1a",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        val dayNames = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d", "\u5468\u65e5")
+                        importConflicts.take(6).forEach {
+                            Text(
+                                "\u2022 ${it.importedCourseName} \u4e0e ${it.existingName} \uff08${dayNames.getOrElse(it.dayOfWeek - 1) { "?" }}\u7b2c${it.startPeriod}-${it.endPeriod}\u8282\uff09",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.error,
+                                maxLines = 1
+                            )
+                        }
+                        if (conflictCount > 6) {
+                            Text("...\u7b49${conflictCount}\u4e2a\u51b2\u7a81", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     showImportConfirm = false
+                    val toImport = parsedCourses
+                    parsedCourses = emptyList()
+                    importConflicts = emptyList()
                     scope.launch {
-                        val (courses, schedules) = viewModel.importParsedCourses(parsedCourses)
-                        importResult = courses to schedules
-                        parsedCourses = emptyList()
+                        try {
+                            val (courses, schedules) = viewModel.importParsedCourses(toImport)
+                            importResult = courses to schedules
+                        } catch (e: Exception) {
+                            importError = "\u5bfc\u5165\u5931\u8d25\uff1a${e.message}"
+                        }
                     }
-                }) { Text("\u5bfc\u5165") }
+                }) { Text("\u5168\u90e8\u5bfc\u5165") }
             },
             dismissButton = {
-                TextButton(onClick = { showImportConfirm = false; parsedCourses = emptyList() }) { Text("\u53d6\u6d88") }
+                Row {
+                    if (conflictCount > 0) {
+                        TextButton(onClick = {
+                            showImportConfirm = false
+                            val conflictNames = importConflicts.map { it.importedCourseName }.toSet()
+                            val toImport = parsedCourses.filter { it.name !in conflictNames }
+                            parsedCourses = emptyList()
+                            importConflicts = emptyList()
+                            scope.launch {
+                                try {
+                                    val (courses, schedules) = viewModel.importParsedCourses(toImport)
+                                    importResult = courses to schedules
+                                } catch (e: Exception) {
+                                    importError = "\u5bfc\u5165\u5931\u8d25\uff1a${e.message}"
+                                }
+                            }
+                        }) {
+                            Text("\u8df3\u8fc7\u51b2\u7a81\u5bfc\u5165", color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    TextButton(onClick = { showImportConfirm = false; parsedCourses = emptyList(); importConflicts = emptyList() }) { Text("\u53d6\u6d88") }
+                }
             }
         )
     }

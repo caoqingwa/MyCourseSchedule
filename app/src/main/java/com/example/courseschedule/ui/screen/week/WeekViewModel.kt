@@ -57,6 +57,15 @@ class WeekViewModel @Inject constructor(
         val period: Int
     )
 
+    @Immutable
+    data class ImportConflict(
+        val importedCourseName: String,
+        val existingName: String,
+        val dayOfWeek: Int,
+        val startPeriod: Int,
+        val endPeriod: Int
+    )
+
     private val _selectedWeek = MutableStateFlow(0)
     private val _highlightDayOfWeek = MutableStateFlow(0)
 
@@ -239,6 +248,38 @@ class WeekViewModel @Inject constructor(
             scheduleCount += schedPairs.size
         }
         return courseCount to scheduleCount
+    }
+
+    /** 检测待导入课程与当前学期已有课程的时间冲突 */
+    suspend fun checkImportConflicts(courses: List<ImportedCourse>): List<ImportConflict> {
+        val state = uiState.value
+        val schedules = state.allSchedules
+        val courseMap = state.allCourseMap
+        val conflicts = mutableListOf<ImportConflict>()
+        for (course in courses) {
+            for (s in course.schedules) {
+                for (existing in schedules) {
+                    if (existing.dayOfWeek != s.dayOfWeek) continue
+                    val periodOverlap = s.startPeriod <= existing.endPeriod && s.endPeriod >= existing.startPeriod
+                    if (!periodOverlap) continue
+                    val weekOverlap = s.startWeek <= existing.endWeek && s.endWeek >= existing.startWeek
+                    if (!weekOverlap) continue
+                    val typeConflict = s.weekType == 0 || existing.weekType == 0 || s.weekType == existing.weekType
+                    if (!typeConflict) continue
+                    val name = courseMap[existing.courseId]?.name ?: "\u8bfe\u7a0b"
+                    conflicts.add(
+                        ImportConflict(
+                            importedCourseName = course.name,
+                            existingName = name,
+                            dayOfWeek = s.dayOfWeek,
+                            startPeriod = s.startPeriod,
+                            endPeriod = s.endPeriod
+                        )
+                    )
+                }
+            }
+        }
+        return conflicts
     }
 
     suspend fun checkConflict(
