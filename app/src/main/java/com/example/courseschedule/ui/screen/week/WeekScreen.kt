@@ -1,6 +1,8 @@
 package com.example.courseschedule.ui.screen.week
 
 import android.annotation.SuppressLint
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -18,6 +20,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +31,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Schedule
+import com.example.courseschedule.data.importer.ImportedCourse
+import com.example.courseschedule.data.importer.XlsxCourseParser
 import com.example.courseschedule.ui.component.AddCourseDialog
 import com.example.courseschedule.ui.component.CourseScheduleTopBar
 import com.example.courseschedule.ui.component.EditCourseDialog
@@ -72,7 +77,90 @@ fun WeekScreen(
     var editSchedule by remember { mutableStateOf<Schedule?>(null) }
     var addDialogConflicts by remember { mutableStateOf<List<Pair<String, Int>>>(emptyList()) }
 
+    // 导入课表状态
+    var importResult by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var importError by remember { mutableStateOf<String?>(null) }
+    var showImportConfirm by remember { mutableStateOf(false) }
+    var parsedCourses by remember { mutableStateOf<List<ImportedCourse>>(emptyList()) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val courses = context.contentResolver.openInputStream(uri)?.use { XlsxCourseParser.parse(it) }
+                        ?: emptyList()
+                    if (courses.isEmpty()) {
+                        importError = "\u672a\u89e3\u6790\u51fa\u6709\u6548\u8bfe\u7a0b\uff08\u8bf7\u786e\u8ba4\u8868\u683c\u5305\u542b\u201c\u8bfe\u7a0b\u540d\u79f0\u201d\u4e0e\u201c\u4e0a\u8bfe\u65f6\u95f4\u201d\u5217\uff09"
+                    } else {
+                        parsedCourses = courses
+                        showImportConfirm = true
+                    }
+                } catch (e: Exception) {
+                    importError = "\u5bfc\u5165\u5931\u8d25\uff1a${e.message}"
+                }
+            }
+        }
+    }
+
+    // 导入结果确认
+    if (showImportConfirm && parsedCourses.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { showImportConfirm = false },
+            title = { Text("\u5bfc\u5165\u8bfe\u7a0b\u786e\u8ba4") },
+            text = {
+                Column {
+                    Text(
+                        "\u53d1\u73b0 ${parsedCourses.size} \u95e8\u8bfe\u7a0b\uff0c\u5c06\u5bfc\u5165\u5f53\u524d\u5b66\u671f\uff1a",
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    parsedCourses.take(8).forEach {
+                        Text("\u2022 ${it.name}", fontSize = 13.sp, maxLines = 1)
+                    }
+                    if (parsedCourses.size > 8) {
+                        Text("...\u7b49${parsedCourses.size}\u95e8", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showImportConfirm = false
+                    scope.launch {
+                        val (courses, schedules) = viewModel.importParsedCourses(parsedCourses)
+                        importResult = courses to schedules
+                        parsedCourses = emptyList()
+                    }
+                }) { Text("\u5bfc\u5165") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportConfirm = false; parsedCourses = emptyList() }) { Text("\u53d6\u6d88") }
+            }
+        )
+    }
+    importResult?.let { (courses, schedules) ->
+        AlertDialog(
+            onDismissRequest = { importResult = null },
+            title = { Text("\u5bfc\u5165\u5b8c\u6210") },
+            text = { Text("\u6210\u529f\u5bfc\u5165 ${courses} \u95e8\u8bfe\u7a0b\u3001${schedules} \u4e2a\u6392\u8bfe\u65f6\u6bb5\u3002") },
+            confirmButton = {
+                TextButton(onClick = { importResult = null }) { Text("\u597d") }
+            }
+        )
+    }
+    importError?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { importError = null },
+            title = { Text("\u5bfc\u5165\u5931\u8d25") },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = { importError = null }) { Text("\u597d") }
+            }
+        )
+    }
+
     val density = LocalDensity.current
     val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
 
@@ -254,7 +342,11 @@ fun WeekScreen(
             onLoadPreset = { preset ->
                 viewModel.saveSemester(preset.name, preset.startDate, preset.totalWeeks, preset.periodCount, preset.weekDays, preset.periodTimesJson)
             },
-            onDeletePreset = { viewModel.deletePreset(it) }
+            onDeletePreset = { viewModel.deletePreset(it) },
+            onImportClick = {
+                showSemesterDialog = false
+                importLauncher.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream", "*/*"))
+            }
         )
     }
 }

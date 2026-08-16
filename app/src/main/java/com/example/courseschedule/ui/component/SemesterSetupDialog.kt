@@ -43,7 +43,8 @@ fun SemesterSetupDialog(
     onDismiss: () -> Unit,
     onConfirm: (name: String, startDateMillis: Long, totalWeeks: Int, periodCount: Int, weekDays: Int, periodTimesJson: String) -> Unit,
     onLoadPreset: (Semester) -> Unit,
-    onDeletePreset: (Semester) -> Unit
+    onDeletePreset: (Semester) -> Unit,
+    onImportClick: (() -> Unit)? = null
 ) {
     val cal = Calendar.getInstance().apply {
         timeInMillis = semester?.startDate ?: System.currentTimeMillis()
@@ -118,6 +119,11 @@ fun SemesterSetupDialog(
                 if (savedPresets.isNotEmpty()) {
                     TextButton(onClick = { showPresetList = !showPresetList }) {
                         Text("\u9884\u8bbe", fontSize = 13.sp)
+                    }
+                }
+                if (onImportClick != null) {
+                    TextButton(onClick = onImportClick) {
+                        Text("\u5bfc\u5165\u8bfe\u7a0b", fontSize = 13.sp)
                     }
                 }
             }
