@@ -105,6 +105,15 @@ class CourseRepository @Inject constructor(
     }
 
     /** 批量导入：一个课程（含多个排课时段）在一个事务内插入；教室查重复用，课程 roomId 取首个时段教室 */
+    /** 清除所有课程相关数据（课程/课表/考试/教室），保留学期设置 */
+    @Transaction
+    suspend fun clearAllCourseData() {
+        scheduleDao.deleteAll()
+        examDao.deleteAll()
+        courseDao.deleteAll()
+        roomDao.deleteAll()
+    }
+
     @Transaction
     suspend fun importCourseWithSchedules(
         semesterId: Long,

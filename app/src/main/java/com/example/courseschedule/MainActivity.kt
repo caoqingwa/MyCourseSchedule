@@ -13,15 +13,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Schedule
+import com.example.courseschedule.BuildConfig
 import com.example.courseschedule.ui.navigation.Screen
 import com.example.courseschedule.ui.navigation.bottomNavItems
 import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.ui.component.BottomNavBar
 import com.example.courseschedule.ui.component.EditCourseDialog
+import com.example.courseschedule.ui.component.SemesterSetupDialog
+import com.example.courseschedule.ui.component.SettingsScreen
 import com.example.courseschedule.ui.screen.detail.CourseDetailSheet
 import com.example.courseschedule.ui.screen.detail.CourseDetailViewModel
 import com.example.courseschedule.ui.screen.today.TodayScreen
@@ -30,6 +35,7 @@ import com.example.courseschedule.ui.screen.week.WeekViewModel
 import com.example.courseschedule.ui.screen.calendar.CalendarScreen
 import com.example.courseschedule.ui.theme.CourseScheduleTheme
 import com.example.courseschedule.util.DateUtils
+import com.example.courseschedule.util.SettingsPrefs
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -57,6 +63,10 @@ fun MainApp() {
     val detailViewModel: CourseDetailViewModel = hiltViewModel()
     val detailState by detailViewModel.uiState.collectAsStateWithLifecycle()
     val weekViewModel: WeekViewModel = hiltViewModel()
+
+    var showSettings by remember { mutableStateOf(false) }
+    var showSettingsSemesterDialog by remember { mutableStateOf(false) }
+    val fontScale by SettingsPrefs.fontScale.collectAsStateWithLifecycle()
 
     var editTarget by remember { mutableStateOf<Pair<Course, Schedule>?>(null) }
     var editRoom by remember { mutableStateOf("") }
@@ -138,7 +148,8 @@ fun MainApp() {
                         NavigationState.targetDayOfWeek = DateUtils.getDayOfWeek(dayMillis)
                         navigateTo(1)
                     },
-                    onNavigateToToday = { navigateTo(0) }
+                    onNavigateToToday = { navigateTo(0) },
+                    onOpenSettings = { showSettings = true }
                 )
             }
         }
@@ -199,6 +210,46 @@ fun MainApp() {
                 weekViewModel.deleteCourse(targetCourse.id)
                 editTarget = null
             }
+        )
+    }
+
+    if (showSettings) {
+        // 全屏覆盖设置页（字体缩放随 SettingsPrefs 实时变化）
+        val density = LocalDensity.current
+        CompositionLocalProvider(
+            LocalDensity provides Density(
+                density = density.density,
+                fontScale = density.fontScale * fontScale
+            )
+        ) {
+            SettingsScreen(
+                versionName = BuildConfig.VERSION_NAME,
+                onBack = { showSettings = false },
+                onOpenSemesterSetup = { showSettingsSemesterDialog = true },
+                onClearAll = {
+                    weekViewModel.clearAllCourseData()
+                    showSettings = false
+                }
+            )
+        }
+    }
+    if (showSettingsSemesterDialog) {
+        val settingsState = weekViewModel.uiState.collectAsStateWithLifecycle().value
+        SemesterSetupDialog(
+            semester = settingsState.semester,
+            savedPresets = settingsState.presets.filter { it.id != settingsState.semester?.id },
+            maxScheduledPeriod = settingsState.maxScheduledPeriod,
+            hasWeekendCourses = settingsState.hasWeekendCourses,
+            onDismiss = { showSettingsSemesterDialog = false },
+            onConfirm = { name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson ->
+                weekViewModel.saveSemester(name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson)
+                showSettingsSemesterDialog = false
+            },
+            onLoadPreset = { preset ->
+                weekViewModel.saveSemester(preset.name, preset.startDate, preset.totalWeeks, preset.periodCount, preset.weekDays, preset.periodTimesJson)
+            },
+            onDeletePreset = { weekViewModel.deletePreset(it) },
+            onImportClick = null
         )
     }
 }

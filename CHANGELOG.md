@@ -1,5 +1,25 @@
 # CourseSchedule 更新日志
 
+## v2.8 (2026-08-16)
+
+### 通用设置页面
+- 日历页右上角新增设置入口，点击进入独立设置页面（非底部导航 tab）
+- 字体大小调节：滑条 80%~140%，全局实时生效（LocalDensity.fontScale 覆盖，持久化到 SettingsPrefs）
+- 学期管理：设置页一键进入学期设置（开学日期/总周数/节数/时间/预设）
+- 清除所有课程信息：删除全部课程/课表/考试/教室（保留学期设置），含二次确认，同时取消全部提醒
+- 检查更新：查询 GitHub Releases 最新版本，自动对比当前版本提示是否有新版本
+- 版本号显示（BuildConfig.VERSION_NAME）
+
+### 页面调整
+- 今日页移除学期设置按钮（showSettings=false），保留周课表设置入口
+- 今日页清理 SemesterSetupDialog 相关死代码
+
+### 数据层
+- DAO 新增 deleteAll（courses/schedules/exams/rooms），Repository 新增 clearAllCourseData 事务
+- WeekViewModel 注入 ApplicationContext，新增 clearAllCourseData
+
+---
+
 ## v2.7 (2026-08-14)
 
 ### 周课表课程块间距

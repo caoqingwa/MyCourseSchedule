@@ -16,7 +16,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.courseschedule.ui.component.CourseCard
 import com.example.courseschedule.ui.component.CourseScheduleTopBar
-import com.example.courseschedule.ui.component.SemesterSetupDialog
 import com.example.courseschedule.util.DateUtils
 import com.example.courseschedule.util.NotificationPrefs
 import com.example.courseschedule.worker.CourseReminderWorker
@@ -33,7 +32,6 @@ fun TodayScreen(
     val todayStr = remember {
         SimpleDateFormat("yyyy\u5e74M\u6708d\u65e5 \u00b7 EEEE", Locale.CHINESE).format(Date())
     }
-    var showSemesterDialog by remember { mutableStateOf(false) }
 
     val scheduledCourses = remember { mutableSetOf<Long>() }
     val notificationsEnabled by NotificationPrefs.enabled.collectAsStateWithLifecycle()
@@ -74,7 +72,8 @@ fun TodayScreen(
         CourseScheduleTopBar(
             selectedWeek = currentWeek,
             currentWeek = currentWeek,
-            onSettingsClick = { showSemesterDialog = true }
+            onSettingsClick = {},
+            showSettings = false
         )
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -146,23 +145,5 @@ fun TodayScreen(
                 }
             }
         }
-    }
-
-    if (showSemesterDialog) {
-        SemesterSetupDialog(
-            semester = state.semester,
-            savedPresets = state.presets.filter { it.id != state.semester?.id },
-            maxScheduledPeriod = state.maxScheduledPeriod,
-            hasWeekendCourses = state.hasWeekendCourses,
-            onDismiss = { showSemesterDialog = false },
-            onConfirm = { name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson ->
-                viewModel.saveSemester(name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson)
-                showSemesterDialog = false
-            },
-            onLoadPreset = { preset ->
-                viewModel.saveSemester(preset.name, preset.startDate, preset.totalWeeks, preset.periodCount, preset.weekDays, preset.periodTimesJson)
-            },
-            onDeletePreset = { viewModel.deletePreset(it) }
-        )
     }
 }

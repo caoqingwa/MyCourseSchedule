@@ -1,5 +1,6 @@
 package com.example.courseschedule.ui.screen.week
 
+import android.content.Context
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,7 +12,10 @@ import com.example.courseschedule.data.importer.ImportedCourse
 import com.example.courseschedule.data.repository.CourseRepository
 import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.util.DateUtils
+import com.example.courseschedule.worker.CourseReminderWorker
+import com.example.courseschedule.worker.ExamReminderWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -23,7 +27,8 @@ import javax.inject.Inject
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class WeekViewModel @Inject constructor(
-    private val repository: CourseRepository
+    private val repository: CourseRepository,
+    @ApplicationContext private val applicationContext: Context
 ) : ViewModel() {
 
     @Immutable
@@ -222,6 +227,15 @@ class WeekViewModel @Inject constructor(
     fun deleteCourse(courseId: Long) {
         viewModelScope.launch {
             repository.deleteCourseWithSchedules(courseId)
+        }
+    }
+
+    /** 清除所有课程/课表/考试/教室数据（保留学期设置） */
+    fun clearAllCourseData() {
+        viewModelScope.launch {
+            repository.clearAllCourseData()
+            CourseReminderWorker.cancelAll(applicationContext)
+            ExamReminderWorker.cancelAll(applicationContext)
         }
     }
 

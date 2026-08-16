@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
@@ -44,6 +45,7 @@ import kotlinx.coroutines.launch
 fun CalendarScreen(
     onDayClick: (dayMillis: Long, weekNumber: Int) -> Unit,
     onNavigateToToday: () -> Unit,
+    onOpenSettings: () -> Unit = {},
     viewModel: CalendarViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -213,6 +215,10 @@ fun CalendarScreen(
                             contentDescription = if (state.notificationsEnabled) "\u5173\u95ed\u63d0\u9192" else "\u5f00\u542f\u63d0\u9192",
                             tint = if (state.notificationsEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    // 全局设置
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "\u8bbe\u7f6e")
                     }
                 }
             )

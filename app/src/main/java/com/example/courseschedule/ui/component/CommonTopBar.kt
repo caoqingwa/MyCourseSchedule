@@ -24,6 +24,7 @@ fun CourseScheduleTopBar(
     currentWeek: Int,
     onSettingsClick: () -> Unit,
     onBackToCurrentWeek: (() -> Unit)? = null,
+    showSettings: Boolean = true,
     title: String = "\u8bfe\u7a0b\u8868"
 ) {
     TopAppBar(
@@ -54,8 +55,10 @@ fun CourseScheduleTopBar(
             }
         },
         actions = {
-            IconButton(onClick = onSettingsClick) {
-                Icon(Icons.Default.Settings, contentDescription = "\u5b66\u671f\u8bbe\u7f6e")
+            if (showSettings) {
+                IconButton(onClick = onSettingsClick) {
+                    Icon(Icons.Default.Settings, contentDescription = "\u5b66\u671f\u8bbe\u7f6e")
+                }
             }
         }
     )
