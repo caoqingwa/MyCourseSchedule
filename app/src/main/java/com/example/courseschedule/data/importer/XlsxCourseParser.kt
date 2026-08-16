@@ -2,6 +2,9 @@ package com.example.courseschedule.data.importer
 
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
+import java.io.BufferedInputStream
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -45,32 +48,41 @@ object XlsxCourseParser {
     )
 
     // 匹配 "星期四第9-11节{3-11周(单)}" 或 "第9-11节{1-16周}"（无星期前缀时补默认）
+    // 注意：Android 使用 ICU 正则引擎，孤立的 "}" 必须转义为 "\}"，否则 PatternSyntaxException
     private val TIME_PATTERN = Pattern.compile(
-        "(?:星期([一二三四五六日]))?第(\\d+)-(\\d+)节\\{(\\d+)-(\\d+)周(?:\\(([单双])\\))?}"
+        "(?:星期([一二三四五六日]))?第(\\d+)-(\\d+)节\\{(\\d+)-(\\d+)周(?:\\(([单双])\\))?\\}"
     )
 
     /** 解析 xlsx 输入流，返回课程列表 */
     fun parse(input: InputStream): List<ImportedCourse> {
-        val sharedStrings = readSharedStrings(input)
-        val rows = readSheetRows(input, sharedStrings)
-        return rowsToCourses(rows)
-    }
-
-    /** 读取 xl/sharedStrings.xml 全部文本 */
-    private fun readSharedStrings(zipInput: InputStream): List<String> {
-        val result = mutableListOf<String>()
-        ZipInputStream(zipInput).use { zip ->
+        // 单次遍历 zip：sharedStrings.xml 与第一个 worksheet 均读到内存，避免重复包装关闭底层流
+        val sharedBytes = ByteArrayOutputStream()
+        var sheetBytes: ByteArray? = null
+        ZipInputStream(BufferedInputStream(input)).use { zip ->
             var entry = zip.nextEntry
             while (entry != null) {
-                if (entry.name == "xl/sharedStrings.xml") {
-                    collectSharedStrings(zip, result)
-                    break
+                when {
+                    entry.name == "xl/sharedStrings.xml" -> zip.copyTo(sharedBytes)
+                    entry.name.startsWith("xl/worksheets/") && entry.name.endsWith(".xml") && sheetBytes == null -> {
+                        val buf = ByteArrayOutputStream()
+                        zip.copyTo(buf)
+                        sheetBytes = buf.toByteArray()
+                    }
                 }
                 zip.closeEntry()
                 entry = zip.nextEntry
             }
         }
-        return result
+        val shared = parseSharedStrings(ByteArrayInputStream(sharedBytes.toByteArray()))
+        val sheet = sheetBytes ?: return emptyList()
+        val rows = parseSheet(ByteArrayInputStream(sheet), shared)
+        return rowsToCourses(rows)
+    }
+
+    private fun parseSharedStrings(input: InputStream): List<String> {
+        val out = mutableListOf<String>()
+        collectSharedStrings(input, out)
+        return out
     }
 
     private fun collectSharedStrings(input: InputStream, out: MutableList<String>) {
@@ -96,24 +108,8 @@ object XlsxCourseParser {
         }
     }
 
-    /** 读取第一个 worksheet 的单元格，返回 List<List<String>>（含表头行） */
-    private fun readSheetRows(zipInput: InputStream, shared: List<String>): List<List<String>> {
+    private fun parseSheet(input: InputStream, shared: List<String>): List<List<String>> {
         val rows = mutableListOf<List<String>>()
-        ZipInputStream(zipInput).use { zip ->
-            var entry = zip.nextEntry
-            while (entry != null) {
-                if (entry.name.startsWith("xl/worksheets/") && entry.name.endsWith(".xml")) {
-                    parseSheet(zip, shared, rows)
-                    break
-                }
-                zip.closeEntry()
-                entry = zip.nextEntry
-            }
-        }
-        return rows
-    }
-
-    private fun parseSheet(input: InputStream, shared: List<String>, rows: MutableList<List<String>>) {
         val parser = newParser(input)
         var currentRow = mutableListOf<Pair<String, String>>() // 列字母 -> 值
         var inRow = false
@@ -123,7 +119,11 @@ object XlsxCourseParser {
         var text = StringBuilder()
 
         fun flushCell() {
-            val value = text.toString()
+            val raw = text.toString()
+            val value = if (cellType == "s") {
+                // shared string：v 里是索引数字
+                raw.toIntOrNull()?.let { shared.getOrNull(it) } ?: ""
+            } else raw
             if (cellRef.isNotEmpty()) currentRow.add(cellRef to value)
             cellRef = ""; cellType = ""; inV = false; text = StringBuilder()
         }
@@ -158,21 +158,27 @@ object XlsxCourseParser {
         }
         // 最后一个 c 未闭合时兜底
         if (cellRef.isNotEmpty()) flushCell()
+        return rows
     }
 
     /** 把稀疏 (列字母,值) 展开为按列索引 0..max 的列表 */
     private fun expandRow(cells: List<Pair<String, String>>): List<String> {
         if (cells.isEmpty()) return emptyList()
-        val maxCol = cells.maxOf { colIndex(it.first) }
-        val arr = MutableList(maxCol + 1) { "" }
-        for ((ref, v) in cells) {
+        val indexed = cells.mapNotNull { (ref, v) ->
             val idx = colIndex(ref)
-            if (idx <= maxCol) arr[idx] = v
+            if (idx >= 0) idx to v else null
+        }
+        if (indexed.isEmpty()) return emptyList()
+        val maxCol = indexed.maxOf { it.first }
+        val arr = MutableList(maxCol + 1) { "" }
+        for ((idx, v) in indexed) {
+            arr[idx] = v
         }
         return arr
     }
 
     private fun colIndex(ref: String): Int {
+        if (ref.isEmpty()) return -1
         var n = 0
         for (ch in ref) {
             if (ch in 'A'..'Z') n = n * 26 + (ch - 'A' + 1)
