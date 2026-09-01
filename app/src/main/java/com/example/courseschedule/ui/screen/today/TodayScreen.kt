@@ -17,8 +17,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.courseschedule.ui.component.CourseCard
 import com.example.courseschedule.ui.component.CourseScheduleTopBar
 import com.example.courseschedule.util.DateUtils
-import com.example.courseschedule.util.NotificationPrefs
-import com.example.courseschedule.worker.CourseReminderWorker
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -31,37 +29,6 @@ fun TodayScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val todayStr = remember {
         SimpleDateFormat("yyyy\u5e74M\u6708d\u65e5 \u00b7 EEEE", Locale.CHINESE).format(Date())
-    }
-
-    val scheduledCourses = remember { mutableSetOf<Long>() }
-    val notificationsEnabled by NotificationPrefs.enabled.collectAsStateWithLifecycle()
-    LaunchedEffect(state.upcomingCourses, state.semester, notificationsEnabled) {
-        if (!notificationsEnabled) {
-            scheduledCourses.clear()
-            return@LaunchedEffect
-        }
-        val now = System.currentTimeMillis()
-        val periodTimes = state.semester?.getPeriodTimes().orEmpty()
-        state.upcomingCourses.forEach { cws ->
-            val scheduleId = cws.schedule.id
-            if (scheduledCourses.add(scheduleId)) {
-                val startTime = periodTimes.getOrNull(cws.schedule.startPeriod - 1)?.start
-                    ?.split(":")?.let { (h, m) ->
-                        Calendar.getInstance().apply {
-                            timeInMillis = now
-                            set(Calendar.HOUR_OF_DAY, h.toIntOrNull() ?: 0)
-                            set(Calendar.MINUTE, m.toIntOrNull() ?: 0)
-                            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-                        }.timeInMillis
-                    } ?: return@forEach
-                val delayMillis = startTime - 5 * 60_000L - now
-                if (delayMillis > 0) {
-                    val roomName = cws.roomName ?: ""
-                    val periodStr = "\u7b2c" + cws.schedule.startPeriod + "-" + cws.schedule.endPeriod + "\u8282"
-                    CourseReminderWorker.schedule(viewModel.context, cws.course.name, roomName, periodStr, delayMillis, scheduleId)
-                }
-            }
-        }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -93,17 +60,37 @@ fun TodayScreen(
         if (state.isEmpty) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("\ud83d\udcda", fontSize = 48.sp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        "\u4eca\u5929\u6ca1\u6709\u8bfe\u7a0b\uff0c\u597d\u597d\u4f11\u606f\u5427",
-                        fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        "\u53bb\u6d3b\u52a8\u6d3b\u52a8\u5427 \ud83d\ude0a",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.outline
-                    )
+                    when {
+                        state.beforeSemesterStart -> {
+                            Text("\ud83d\udcc5", fontSize = 48.sp)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                "\u5b66\u671f\u8fd8\u672a\u5f00\u59cb\uff0c\u653e\u677e\u4e00\u4e0b\u5427",
+                                fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        state.afterSemesterEnd -> {
+                            Text("\ud83c\udf89", fontSize = 48.sp)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                "\u5b66\u671f\u5df2\u7ed3\u675f\uff0c\u5f00\u5f00\u5fc3\u5fc3\u8fc7\u5047\u671f",
+                                fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        else -> {
+                            Text("\ud83d\udcda", fontSize = 48.sp)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                "\u4eca\u5929\u6ca1\u6709\u8bfe\u7a0b\uff0c\u597d\u597d\u4f11\u606f\u5427",
+                                fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                "\u53bb\u6d3b\u52a8\u6d3b\u52a8\u5427 \ud83d\ude0a",
+                                fontSize = 13.sp, color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
                 }
             }
         } else {

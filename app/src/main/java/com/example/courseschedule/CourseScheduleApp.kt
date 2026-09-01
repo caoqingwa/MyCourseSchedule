@@ -44,13 +44,11 @@ class CourseScheduleApp : Application(), Configuration.Provider {
 
     private fun createNotificationChannels() {
         val manager = getSystemService(NotificationManager::class.java)
-        val courseChannel = NotificationChannel("course_reminder", "\u8bfe\u7a0b\u63d0\u9192", NotificationManager.IMPORTANCE_DEFAULT)
-            .apply { description = "\u8bfe\u7a0b\u5f00\u59cb\u524d\u63d0\u9192" }
         val examChannel = NotificationChannel("exam_reminder", "\u8003\u8bd5\u63d0\u9192", NotificationManager.IMPORTANCE_HIGH)
             .apply {
                 description = "\u8003\u8bd5\u65e5\u671f\u63d0\u9192"
                 enableVibration(true)
             }
-        manager.createNotificationChannels(listOf(courseChannel, examChannel))
+        manager.createNotificationChannels(listOf(examChannel))
     }
 }

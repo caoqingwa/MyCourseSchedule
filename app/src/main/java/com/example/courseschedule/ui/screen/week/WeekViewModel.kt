@@ -12,7 +12,6 @@ import com.example.courseschedule.data.importer.ImportedCourse
 import com.example.courseschedule.data.repository.CourseRepository
 import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.util.DateUtils
-import com.example.courseschedule.worker.CourseReminderWorker
 import com.example.courseschedule.worker.ExamReminderWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -234,7 +233,6 @@ class WeekViewModel @Inject constructor(
     fun clearAllCourseData() {
         viewModelScope.launch {
             repository.clearAllCourseData()
-            CourseReminderWorker.cancelAll(applicationContext)
             ExamReminderWorker.cancelAll(applicationContext)
         }
     }

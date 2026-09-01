@@ -67,6 +67,7 @@ fun MainApp() {
     var showSettings by remember { mutableStateOf(false) }
     var showSettingsSemesterDialog by remember { mutableStateOf(false) }
     val fontScale by SettingsPrefs.fontScale.collectAsStateWithLifecycle()
+    val density = LocalDensity.current
 
     var editTarget by remember { mutableStateOf<Pair<Course, Schedule>?>(null) }
     var editRoom by remember { mutableStateOf("") }
@@ -114,6 +115,13 @@ fun MainApp() {
         }
     }
 
+    // 全局字体缩放：覆盖所有页面（今日/周课表/日历/设置/弹窗）
+    CompositionLocalProvider(
+        LocalDensity provides Density(
+            density = density.density,
+            fontScale = density.fontScale * fontScale
+        )
+    ) {
     Scaffold(
         bottomBar = {
             BottomNavBar(
@@ -214,24 +222,15 @@ fun MainApp() {
     }
 
     if (showSettings) {
-        // 全屏覆盖设置页（字体缩放随 SettingsPrefs 实时变化）
-        val density = LocalDensity.current
-        CompositionLocalProvider(
-            LocalDensity provides Density(
-                density = density.density,
-                fontScale = density.fontScale * fontScale
-            )
-        ) {
-            SettingsScreen(
-                versionName = BuildConfig.VERSION_NAME,
-                onBack = { showSettings = false },
-                onOpenSemesterSetup = { showSettingsSemesterDialog = true },
-                onClearAll = {
-                    weekViewModel.clearAllCourseData()
-                    showSettings = false
-                }
-            )
-        }
+        SettingsScreen(
+            versionName = BuildConfig.VERSION_NAME,
+            onBack = { showSettings = false },
+            onOpenSemesterSetup = { showSettingsSemesterDialog = true },
+            onClearAll = {
+                weekViewModel.clearAllCourseData()
+                showSettings = false
+            }
+        )
     }
     if (showSettingsSemesterDialog) {
         val settingsState = weekViewModel.uiState.collectAsStateWithLifecycle().value
@@ -251,5 +250,6 @@ fun MainApp() {
             onDeletePreset = { weekViewModel.deletePreset(it) },
             onImportClick = null
         )
+    }
     }
 }

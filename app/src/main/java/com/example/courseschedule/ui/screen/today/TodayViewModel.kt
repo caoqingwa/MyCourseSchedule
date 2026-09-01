@@ -1,6 +1,5 @@
 package com.example.courseschedule.ui.screen.today
 
-import android.content.Context
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -10,7 +9,6 @@ import com.example.courseschedule.data.repository.CourseRepository
 import com.example.courseschedule.ui.component.CourseWithSchedule
 import com.example.courseschedule.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -21,8 +19,7 @@ import javax.inject.Inject
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TodayViewModel @Inject constructor(
-    private val repository: CourseRepository,
-    @ApplicationContext val context: Context
+    private val repository: CourseRepository
 ) : ViewModel() {
 
     private val ticker = flow {
@@ -40,6 +37,8 @@ class TodayViewModel @Inject constructor(
         val currentPeriod: Int = 0,
         val totalRemaining: Int = 0,
         val isEmpty: Boolean = true,
+        val beforeSemesterStart: Boolean = false,
+        val afterSemesterEnd: Boolean = false,
         val presets: List<Semester> = emptyList(),
         val maxScheduledPeriod: Int = 0,
         val hasWeekendCourses: Boolean = false
@@ -66,9 +65,18 @@ class TodayViewModel @Inject constructor(
             val now = System.currentTimeMillis()
             val dayOfWeek = DateUtils.getDayOfWeek(now)
             val currentWeek = DateUtils.getWeekNumber(now, semester.startDate)
-            val activeSchedules = schedules.filter {
-                it.dayOfWeek == dayOfWeek && DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, currentWeek)
-            }.sortedBy { it.startPeriod }
+
+            // 先判断当前日期是否处于学期时间范围内：未开学或已结课则不显示任何课程
+            val beforeStart = now < DateUtils.getStartOfWeek(semester.startDate)
+            val afterEnd = currentWeek > semester.totalWeeks
+
+            val activeSchedules = if (beforeStart || afterEnd) {
+                emptyList()
+            } else {
+                schedules.filter {
+                    it.dayOfWeek == dayOfWeek && DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, currentWeek)
+                }.sortedBy { it.startPeriod }
+            }
 
             val periodTimes = semester.getPeriodTimes()
             val currentPeriod = DateUtils.getCurrentPeriod(semester)
@@ -113,6 +121,8 @@ class TodayViewModel @Inject constructor(
                 currentPeriod = currentPeriod,
                 totalRemaining = if (current != null) upcoming.size + 1 else upcoming.size,
                 isEmpty = activeSchedules.isEmpty(),
+                beforeSemesterStart = beforeStart,
+                afterSemesterEnd = afterEnd,
                 presets = presets,
                 maxScheduledPeriod = maxPeriod,
                 hasWeekendCourses = hasWeekend

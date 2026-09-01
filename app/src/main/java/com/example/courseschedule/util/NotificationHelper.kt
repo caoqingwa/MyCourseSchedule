@@ -11,7 +11,6 @@ import androidx.core.content.ContextCompat
 import com.example.courseschedule.MainActivity
 
 object NotificationHelper {
-    private const val CHANNEL_COURSE = "course_reminder"
     private const val CHANNEL_EXAM = "exam_reminder"
 
     private fun baseIntent(context: Context): PendingIntent {
@@ -25,21 +24,6 @@ object NotificationHelper {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         } else true
-    }
-
-    fun showCourseReminder(context: Context, courseName: String, roomName: String, period: String, notificationId: Int) {
-        if (!hasNotificationPermission(context)) return
-        val notification = NotificationCompat.Builder(context, CHANNEL_COURSE)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle(courseName)
-            .setContentText(period + " \u00b7 " + roomName + " \u5373\u5c06\u5f00\u59cb")
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setContentIntent(baseIntent(context))
-            .setAutoCancel(true)
-            .build()
-        try {
-            NotificationManagerCompat.from(context).notify(notificationId, notification)
-        } catch (_: SecurityException) {}
     }
 
     fun showExamReminder(context: Context, examName: String, hoursUntilExam: Int, notificationId: Int) {

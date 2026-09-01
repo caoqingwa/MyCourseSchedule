@@ -52,7 +52,7 @@ fun WeekGrid(
     val colCount = weekDays.coerceIn(5, 7)
     val dayNames = if (colCount == 7) DateUtils.DAY_NAMES_7 else DateUtils.DAY_NAMES_5
     val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
-    val cellShape = RoundedCornerShape(2.dp)
+    val cellShape = RoundedCornerShape(8.dp)
     val cellHeight = 80.dp
     val headerHeight = 30.dp
     val dateRowHeight = 22.dp

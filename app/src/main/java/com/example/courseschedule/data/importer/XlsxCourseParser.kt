@@ -198,11 +198,16 @@ object XlsxCourseParser {
     private fun rowsToCourses(rows: List<List<String>>): List<ImportedCourse> {
         if (rows.isEmpty()) return emptyList()
         val header = rows[0]
-        // 表头名 -> 列索引
+        // 表头名 -> 列索引：按别名优先级匹配（如"教师姓名"优先于"任课教师"），列顺序可打乱
         val colMap = mutableMapOf<String, Int>()
-        for ((idx, h) in header.withIndex()) {
-            val key = headerKey(h)
-            if (key != null && key !in colMap) colMap[key] = idx
+        for ((key, aliases) in HEADER_ALIASES) {
+            for (alias in aliases) {
+                val idx = header.indexOfFirst { it.trim() == alias }
+                if (idx >= 0) {
+                    colMap[key] = idx
+                    break
+                }
+            }
         }
         val nameIdx = colMap["name"] ?: return emptyList()
         val teacherIdx = colMap["teacher"] ?: -1
@@ -233,14 +238,6 @@ object XlsxCourseParser {
             if (schedules.isNotEmpty()) courses.add(ImportedCourse(name, teacher, schedules))
         }
         return courses
-    }
-
-    private fun headerKey(raw: String): String? {
-        val t = raw.trim()
-        for ((key, aliases) in HEADER_ALIASES) {
-            if (t in aliases) return key
-        }
-        return null
     }
 
     private fun parseTimeSegment(seg: String, room: String): ImportedSchedule? {

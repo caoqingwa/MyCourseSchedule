@@ -10,7 +10,6 @@ import com.example.courseschedule.data.db.entity.Semester
 import com.example.courseschedule.data.repository.CourseRepository
 import com.example.courseschedule.util.DateUtils
 import com.example.courseschedule.util.NotificationPrefs
-import com.example.courseschedule.worker.CourseReminderWorker
 import com.example.courseschedule.worker.ExamReminderWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -77,8 +76,7 @@ class CalendarViewModel @Inject constructor(
                 ExamReminderWorker.rescheduleAll(appContext, repository.getExamDao())
             }
         } else {
-            // 关闭时取消所有已排定的课程/考试提醒
-            CourseReminderWorker.cancelAll(appContext)
+            // 关闭时取消所有已排定的考试提醒
             ExamReminderWorker.cancelAll(appContext)
         }
     }
