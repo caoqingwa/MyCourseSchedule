@@ -146,7 +146,11 @@ fun WeekGrid(
                                 if (i > 0) Modifier.border(0.5.dp, dateBorderColor, RoundedCornerShape(0.dp))
                                 else Modifier
                             )
-                            .background(if (isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceContainer),
+                            .background(
+                                if (isToday) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                else MaterialTheme.colorScheme.surfaceContainer,
+                                cellShape
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -162,8 +166,7 @@ fun WeekGrid(
         Row(modifier = Modifier.fillMaxWidth().height(headerHeight)) {
             Box(
                 modifier = Modifier.width(periodColWidthDp).fillMaxHeight()
-                    .border(0.8.dp, borderColor, cellShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainer),
+                    .border(0.8.dp, borderColor, cellShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text("\u8282\u6b21", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
@@ -175,7 +178,11 @@ fun WeekGrid(
                 Box(
                     modifier = Modifier.width(colWidthDp.dp).fillMaxHeight()
                         .border(0.8.dp, borderColor, cellShape)
-                        .background(if (isHighlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer),
+                        .background(
+                            if (isHighlighted) MaterialTheme.colorScheme.primary
+                            else Color.Transparent,
+                            cellShape
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -196,7 +203,6 @@ fun WeekGrid(
                     modifier = Modifier
                         .offset(x = 0.dp, y = cellHeight * row)
                         .size(periodColWidthDp, cellHeight)
-                        .background(MaterialTheme.colorScheme.surfaceContainer)
                         .border(0.8.dp, borderColor, cellShape)
                 ) {
                     Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
