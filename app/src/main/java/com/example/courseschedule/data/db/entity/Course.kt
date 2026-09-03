@@ -23,5 +23,6 @@ data class Course(
     val name: String,
     val teacher: String,
     val color: String,
+    /** 遗留字段：v8 起教室归属 schedule.roomId（同课程不同时段可不同教室），本字段仅保持表结构兼容，不再写入/读取 */
     val roomId: Long? = null
 )

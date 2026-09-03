@@ -1,16 +1,23 @@
-"""模拟 Room 迁移链，验证 v1/v2/v6 → v7 的升级安全性。
+"""模拟 Room 迁移链，验证 v1/v2/v6 → v8 的升级安全性。
 
 Room 运行时校验规则：迁移链跑完后，最终 schema 必须与实体一致
 （列、类型、NOT NULL、主键、外键、索引）。
 """
 import sqlite3, os, shutil
 
-# ---------- v7 目标 schema（从 7.json 提取） ----------
-V7_SEMESTERS = """CREATE TABLE semesters (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `startDate` INTEGER NOT NULL, `totalWeeks` INTEGER NOT NULL, `periodCount` INTEGER NOT NULL, `weekDays` INTEGER NOT NULL, `periodTimesJson` TEXT NOT NULL)"""
-V7_COURSES = """CREATE TABLE courses (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `semesterId` INTEGER NOT NULL, `name` TEXT NOT NULL, `teacher` TEXT NOT NULL, `color` TEXT NOT NULL, `roomId` INTEGER, FOREIGN KEY(`semesterId`) REFERENCES `semesters`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"""
+# ---------- v8 目标 schema（从 8.json 提取） ----------
+V8_SEMESTERS = """CREATE TABLE semesters (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `startDate` INTEGER NOT NULL, `totalWeeks` INTEGER NOT NULL, `periodCount` INTEGER NOT NULL, `weekDays` INTEGER NOT NULL, `periodTimesJson` TEXT NOT NULL)"""
+V8_COURSES = """CREATE TABLE courses (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `semesterId` INTEGER NOT NULL, `name` TEXT NOT NULL, `teacher` TEXT NOT NULL, `color` TEXT NOT NULL, `roomId` INTEGER, FOREIGN KEY(`semesterId`) REFERENCES `semesters`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"""
+V8_SCHEDULES = """CREATE TABLE schedules (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `courseId` INTEGER NOT NULL, `dayOfWeek` INTEGER NOT NULL, `startPeriod` INTEGER NOT NULL, `endPeriod` INTEGER NOT NULL, `startWeek` INTEGER NOT NULL, `endWeek` INTEGER NOT NULL, `weekType` INTEGER NOT NULL, `roomId` INTEGER, FOREIGN KEY(`courseId`) REFERENCES `courses`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"""
+V8_ROOMS = """CREATE TABLE rooms (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `building` TEXT)"""
+V8_EXAMS = """CREATE TABLE exams (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `courseId` INTEGER NOT NULL, `examDate` INTEGER NOT NULL, `reminderHours` INTEGER NOT NULL, `notes` TEXT, FOREIGN KEY(`courseId`) REFERENCES `courses`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"""
+
+# v7 schema 与 v8 的区别只在 schedules 多 roomId 列
 V7_SCHEDULES = """CREATE TABLE schedules (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `courseId` INTEGER NOT NULL, `dayOfWeek` INTEGER NOT NULL, `startPeriod` INTEGER NOT NULL, `endPeriod` INTEGER NOT NULL, `startWeek` INTEGER NOT NULL, `endWeek` INTEGER NOT NULL, `weekType` INTEGER NOT NULL, FOREIGN KEY(`courseId`) REFERENCES `courses`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"""
-V7_ROOMS = """CREATE TABLE rooms (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `building` TEXT)"""
-V7_EXAMS = """CREATE TABLE exams (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `courseId` INTEGER NOT NULL, `examDate` INTEGER NOT NULL, `reminderHours` INTEGER NOT NULL, `notes` TEXT, FOREIGN KEY(`courseId`) REFERENCES `courses`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"""
+V7_COURSES = V8_COURSES
+V7_SEMESTERS = V8_SEMESTERS
+V7_ROOMS = V8_ROOMS
+V7_EXAMS = V8_EXAMS
 
 # ---------- v1 初始 schema（数据库版本 1） ----------
 V1_SEMESTERS = "CREATE TABLE semesters (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `startDate` INTEGER NOT NULL, `totalWeeks` INTEGER NOT NULL)"
@@ -90,12 +97,19 @@ def m6_7(db):
     db.execute("DELETE FROM rooms WHERE id NOT IN (SELECT MIN(id) FROM rooms GROUP BY name)")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS index_rooms_name ON rooms(name)")
 
+def m7_8(db):
+    # 教室从课程级迁移到时段级：schedules 加 roomId 列并回填课程教室
+    db.execute("ALTER TABLE schedules ADD COLUMN roomId INTEGER")
+    db.execute("""UPDATE schedules SET roomId = (
+        SELECT roomId FROM courses WHERE courses.id = schedules.courseId
+    )""")
+
 def verify_final(cur, label):
-    """对比 v7 实体与迁移后 schema"""
+    """对比 v8 实体与迁移后 schema"""
     ok = True
     expected = {
-        'semesters': V7_SEMESTERS, 'courses': V7_COURSES, 'schedules': V7_SCHEDULES,
-        'rooms': V7_ROOMS, 'exams': V7_EXAMS,
+        'semesters': V8_SEMESTERS, 'courses': V8_COURSES, 'schedules': V8_SCHEDULES,
+        'rooms': V8_ROOMS, 'exams': V8_EXAMS,
     }
     for table, create in expected.items():
         got = table_info(cur, table)
@@ -114,13 +128,21 @@ def verify_final(cur, label):
         print(f'  [{label}] index {n}: {"OK" if n in idx else "MISSING"}')
         if n not in idx:
             ok = False
-    # 悬空引用断言：迁移后不允许存在指向不存在教室的课程
+    # 悬空引用断言：迁移后不允许存在指向不存在教室的时段
     dangling = cur.execute('''
-        SELECT c.id FROM courses c LEFT JOIN rooms r ON c.roomId = r.id
-        WHERE c.roomId IS NOT NULL AND r.id IS NULL
+        SELECT s.id FROM schedules s LEFT JOIN rooms r ON s.roomId = r.id
+        WHERE s.roomId IS NOT NULL AND r.id IS NULL
     ''').fetchall()
-    print(f'  [{label}] dangling room refs: {len(dangling)}')
+    print(f'  [{label}] dangling schedule room refs: {len(dangling)}')
     if dangling:
+        ok = False
+    # 回填断言：v7 中带教室的课程，其时段在 v8 必须回填同一教室
+    backfilled = cur.execute('''
+        SELECT COUNT(*) FROM schedules s JOIN courses c ON s.courseId = c.id
+        WHERE c.roomId IS NOT NULL AND s.roomId IS NULL
+    ''').fetchone()[0]
+    print(f'  [{label}] schedules missing backfilled room: {backfilled}')
+    if backfilled:
         ok = False
     return ok
 
@@ -136,7 +158,7 @@ def run_case(name, version, setup_fn, seed_fn, run_migrations):
     for m in run_migrations:
         m(db)
     db.commit()
-    cur.execute(f'PRAGMA user_version = 7')
+    cur.execute(f'PRAGMA user_version = 8')
     db.commit()
     ok = verify_final(cur, name)
     # 数据保留验证
@@ -187,8 +209,8 @@ def seed_v2(db):
     db.execute("INSERT INTO schedules (courseId, dayOfWeek, startPeriod, endPeriod, startWeek, endWeek, weekType) VALUES (1, 3, 5, 6, 1, 16, 1)")
     db.execute("INSERT INTO exams (courseId, examDate, reminderDays, notes) VALUES (1, 1680000000000, 7, '实验')")
 
-# ---------- 用例 1: v6 → v7 ----------
-r1 = run_case('v6_to_v7', 6, setup_v6, seed_v6, [m6_7])
+# ---------- 用例 1: v6 → v8 ----------
+r1 = run_case('v6_to_v8', 6, setup_v6, seed_v6, [m6_7, m7_8])
 
 # ---------- 用例 2: v1 → v7 全链 ----------
 def setup_v1(db):
@@ -200,7 +222,7 @@ def setup_v1(db):
         CREATE TABLE exams (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `courseId` INTEGER NOT NULL, `examDate` INTEGER NOT NULL, `reminderDays` INTEGER NOT NULL, `notes` TEXT, FOREIGN KEY(`courseId`) REFERENCES `courses`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE);
     """)
 
-r2 = run_case('v1_to_v7', 1, setup_v1, seed_v1, [m1_2, m2_3, m3_4, m4_5, m5_6, m6_7])
+r2 = run_case('v1_to_v8', 1, setup_v1, seed_v1, [m1_2, m2_3, m3_4, m4_5, m5_6, m6_7, m7_8])
 
 # ---------- 用例 3: v2 → v7 全链 ----------
 def setup_v2(db):
@@ -212,9 +234,9 @@ def setup_v2(db):
         CREATE TABLE exams (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `courseId` INTEGER NOT NULL, `examDate` INTEGER NOT NULL, `reminderDays` INTEGER NOT NULL, `notes` TEXT, FOREIGN KEY(`courseId`) REFERENCES `courses`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE);
     """)
 
-r3 = run_case('v2_to_v7', 2, setup_v2, seed_v2, [m2_3, m3_4, m4_5, m5_6, m6_7])
+r3 = run_case('v2_to_v8', 2, setup_v2, seed_v2, [m2_3, m3_4, m4_5, m5_6, m6_7, m7_8])
 
 print('\n========== 汇总 ==========')
-print(f'v6→v7: {"PASS" if r1 else "FAIL"}')
-print(f'v1→v7: {"PASS" if r2 else "FAIL"}')
-print(f'v2→v7: {"PASS" if r3 else "FAIL"}')
+print(f'v6→v8: {"PASS" if r1 else "FAIL"}')
+print(f'v1→v8: {"PASS" if r2 else "FAIL"}')
+print(f'v2→v8: {"PASS" if r3 else "FAIL"}')

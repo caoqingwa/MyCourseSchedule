@@ -9,7 +9,7 @@ import com.example.courseschedule.data.db.entity.*
 
 @Database(
     entities = [Semester::class, Course::class, Schedule::class, Room::class, Exam::class],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -94,6 +94,20 @@ abstract class AppDatabase : RoomDatabase() {
                 """)
                 db.execSQL("DELETE FROM rooms WHERE id NOT IN (SELECT MIN(id) FROM rooms GROUP BY name)")
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_rooms_name ON rooms(name)")
+            }
+        }
+
+        // 教室从课程级（courses.roomId）迁移到时段级（schedules.roomId）：
+        // 同一课程不同时段可以有不同教室。先把已有课程教室回填到其全部时段，
+        // courses.roomId 列保留（旧版本实体一致），但不再作为权威来源。
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE schedules ADD COLUMN roomId INTEGER")
+                db.execSQL("""
+                    UPDATE schedules SET roomId = (
+                        SELECT roomId FROM courses WHERE courses.id = schedules.courseId
+                    )
+                """)
             }
         }
     }

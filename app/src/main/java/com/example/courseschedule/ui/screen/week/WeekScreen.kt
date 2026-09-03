@@ -355,7 +355,7 @@ fun WeekScreen(
         EditCourseDialog(
             courseName = course.name,
             courseTeacher = course.teacher,
-            courseRoom = course.roomId?.let { state.currentPage.roomMap[it] } ?: "",
+            courseRoom = sched.roomId?.let { state.currentPage.roomMap[it] } ?: "",
             dayOfWeek = sched.dayOfWeek,
             startPeriod = sched.startPeriod,
             endPeriod = sched.endPeriod,

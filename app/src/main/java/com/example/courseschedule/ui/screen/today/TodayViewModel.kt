@@ -88,7 +88,7 @@ class TodayViewModel @Inject constructor(
                     id = sched.courseId, semesterId = semester.id,
                     name = "\u8bfe\u7a0b" + sched.courseId, teacher = "", color = "#CBE8BE"
                 )
-                val roomName = course.roomId?.let { roomMap[it] }
+                val roomName = sched.roomId?.let { roomMap[it] }
                 val cws = CourseWithSchedule(course, sched, roomName)
                 val endRange = periodTimes.getOrNull(sched.endPeriod - 1)
                 val startRange = periodTimes.getOrNull(sched.startPeriod - 1)

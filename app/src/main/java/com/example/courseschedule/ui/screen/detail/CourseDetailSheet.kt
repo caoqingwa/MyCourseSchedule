@@ -17,7 +17,8 @@ import com.example.courseschedule.data.db.entity.Schedule
 fun CourseDetailSheet(
     course: Course,
     schedules: List<Schedule>,
-    roomName: String?,
+    scheduleRooms: Map<Long, String>,
+    roomSummary: String,
     onDismiss: () -> Unit,
     onEdit: () -> Unit
 ) {
@@ -28,7 +29,7 @@ fun CourseDetailSheet(
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
             Text(course.name, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 16.dp))
 
-            DetailRow(icon = "\ud83d\udccd", label = "\u6559\u5ba4", value = roomName ?: "\u5f85\u5206\u914d")
+            DetailRow(icon = "\ud83d\udccd", label = "\u6559\u5ba4", value = roomSummary.ifEmpty { "\u5f85\u5206\u914d" })
             DetailRow(icon = "\ud83d\udc64", label = "\u6559\u5e08", value = course.teacher)
 
             val weekTypes = mapOf(0 to "\u5168\u5468", 1 to "\u5355\u5468", 2 to "\u53cc\u5468")
@@ -39,7 +40,9 @@ fun CourseDetailSheet(
 
             val dayNames = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d", "\u5468\u65e5")
             val scheduleInfo = schedules.joinToString(", ") {
-                dayNames.getOrElse(it.dayOfWeek - 1) { "?" } + " " + it.startPeriod + "-" + it.endPeriod + "\u8282"
+                val room = scheduleRooms[it.id]
+                val day = dayNames.getOrElse(it.dayOfWeek - 1) { "?" }
+                day + " " + it.startPeriod + "-" + it.endPeriod + "\u8282" + (if (!room.isNullOrBlank()) " @" + room else "")
             }
             DetailRow(icon = "\u23f0", label = "\u65f6\u95f4\u5b89\u6392", value = scheduleInfo.ifEmpty { "\u5f85\u914d\u7f6e" })
 

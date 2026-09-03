@@ -264,7 +264,7 @@ fun WeekGrid(
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            val roomName = block.course.roomId?.let { roomMap[it] } ?: ""
+                            val roomName = block.schedule.roomId?.let { roomMap[it] } ?: ""
                             val displayName = if (roomName.isNotBlank()) block.course.name + "@" + roomName else block.course.name
                             Text(
                                 displayName,

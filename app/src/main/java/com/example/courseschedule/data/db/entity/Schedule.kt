@@ -25,5 +25,6 @@ data class Schedule(
     val endPeriod: Int,
     val startWeek: Int,
     val endWeek: Int,
-    val weekType: Int = 0
+    val weekType: Int = 0,
+    val roomId: Long? = null
 )

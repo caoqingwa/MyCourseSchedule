@@ -167,7 +167,8 @@ fun MainApp() {
         CourseDetailSheet(
             course = course,
             schedules = detailState.schedules,
-            roomName = detailState.roomName,
+            scheduleRooms = detailState.scheduleRooms,
+            roomSummary = detailState.roomSummary,
             onDismiss = {
                 selectedCourseId = null
                 detailViewModel.clear()
@@ -175,7 +176,7 @@ fun MainApp() {
             onEdit = {
                 detailState.schedules.firstOrNull()?.let { sched ->
                     editTarget = course to sched
-                    editRoom = detailState.roomName ?: ""
+                    editRoom = detailState.scheduleRooms[sched.id] ?: ""
                     detailState.semester?.let {
                         editTotalWeeks = it.totalWeeks
                         editPeriodCount = it.periodCount

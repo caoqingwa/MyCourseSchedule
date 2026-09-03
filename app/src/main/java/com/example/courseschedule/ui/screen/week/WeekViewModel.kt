@@ -192,11 +192,12 @@ class WeekViewModel @Inject constructor(
             val roomId = if (room.isNotBlank()) repository.insertRoom(Room(name = room)) else null
             val course = Course(
                 semesterId = semester.id, name = name, teacher = teacher,
-                color = "0", roomId = roomId
+                color = "0"
             )
             val schedule = Schedule(
                 courseId = 0, dayOfWeek = dayOfWeek, startPeriod = startPeriod,
-                endPeriod = endPeriod, startWeek = startWeek, endWeek = endWeek, weekType = weekType
+                endPeriod = endPeriod, startWeek = startWeek, endWeek = endWeek,
+                weekType = weekType, roomId = roomId
             )
             repository.insertCourseWithSchedule(course, schedule)
         }
@@ -209,16 +210,18 @@ class WeekViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             val course = repository.getCourseById(courseId) ?: return@launch
+            val schedule = repository.getSchedulesByCourse(courseId).firstOrNull { it.id == scheduleId }
             val roomId = if (room.isNotBlank()) {
-                course.roomId?.let { repository.updateRoom(it, room) }
+                schedule?.roomId?.let { repository.updateRoom(it, room) }
                     ?: repository.insertRoom(Room(name = room))
-            } else course.roomId
-            repository.updateCourse(course.copy(name = name, teacher = teacher, roomId = roomId))
+            } else null
+            repository.updateCourse(course.copy(name = name, teacher = teacher))
 
             repository.updateSchedule(
                 Schedule(id = scheduleId, courseId = courseId, dayOfWeek = dayOfWeek,
                     startPeriod = startPeriod, endPeriod = endPeriod,
-                    startWeek = startWeek, endWeek = endWeek, weekType = weekType)
+                    startWeek = startWeek, endWeek = endWeek, weekType = weekType,
+                    roomId = roomId)
             )
         }
     }

@@ -104,7 +104,6 @@ class CourseRepository @Inject constructor(
         return courseId
     }
 
-    /** 批量导入：一个课程（含多个排课时段）在一个事务内插入；教室查重复用，课程 roomId 取首个时段教室 */
     /** 清除所有课程相关数据（课程/课表/考试/教室），保留学期设置 */
     @Transaction
     suspend fun clearAllCourseData() {
@@ -114,6 +113,7 @@ class CourseRepository @Inject constructor(
         roomDao.deleteAll()
     }
 
+    /** 批量导入：一个课程（含多个排课时段）在一个事务内插入；每个时段独立解析教室并复用同名教室 */
     @Transaction
     suspend fun importCourseWithSchedules(
         semesterId: Long,
@@ -121,13 +121,12 @@ class CourseRepository @Inject constructor(
         teacher: String,
         schedules: List<Pair<Schedule, String?>>
     ): Long {
-        val firstRoom = schedules.firstOrNull()?.second
-        val roomId = firstRoom?.takeIf { it.isNotBlank() }?.let { insertRoom(Room(name = it)) }
         val courseId = courseDao.insert(
-            Course(semesterId = semesterId, name = name, teacher = teacher, color = "0", roomId = roomId)
+            Course(semesterId = semesterId, name = name, teacher = teacher, color = "0")
         )
-        for ((sched, _) in schedules) {
-            scheduleDao.insert(sched.copy(courseId = courseId))
+        for ((sched, roomName) in schedules) {
+            val roomId = roomName?.takeIf { it.isNotBlank() }?.let { insertRoom(Room(name = it)) }
+            scheduleDao.insert(sched.copy(courseId = courseId, roomId = roomId))
         }
         return courseId
     }
