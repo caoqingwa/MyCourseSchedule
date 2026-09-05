@@ -2,7 +2,9 @@ package com.example.courseschedule.ui.component
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,16 +19,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.courseschedule.util.DateUtils
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.math.roundToInt
 
 private const val MILLIS_PER_DAY = 24 * 60 * 60 * 1000L
 
@@ -45,8 +49,10 @@ fun CalendarPicker(
     modifier: Modifier = Modifier
 ) {
     val dows = listOf("\u4e00", "\u4e8c", "\u4e09", "\u56db", "\u4e94", "\u516d", "\u65e5")
+    // 跟手位移：拖动实时平移月历（graphicsLayer 合成变换，无重绘）
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val swipeThreshold = 60f
+    val scope = rememberCoroutineScope()
 
     val semStartCal = remember(semesterStartMillis) {
         Calendar.getInstance().apply { timeInMillis = semesterStartMillis }
@@ -78,18 +84,57 @@ fun CalendarPicker(
 
     val canGoPrev = (currentYear * 100 + currentMonth) > semStartDate
     val canGoNext = (currentYear * 100 + currentMonth) < semEndDate
+    // 月历滑出距离：接近整宽，保证甩出/滑入全程跟手
+    val density = LocalDensity.current
+    val slideDistancePx = with(density) {
+        (LocalConfiguration.current.screenWidthDp * 0.9f).dp.toPx()
+    }
+
+    // 把 dragOffset 动画到 target（甩出用 tween 快动，回弹用 spring）
+    suspend fun animateDragTo(target: Float, springBack: Boolean = false) {
+        androidx.compose.animation.core.animate(
+            initialValue = dragOffset,
+            targetValue = target,
+            initialVelocity = 0f,
+            animationSpec = if (springBack) {
+                spring(dampingRatio = 0.7f, stiffness = 350f)
+            } else {
+                tween(durationMillis = 160)
+            }
+        ) { value, _ -> dragOffset = value }
+    }
 
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .padding(12.dp)
-            .pointerInput(currentMonth, currentYear) {
+            .pointerInput(currentMonth, currentYear, canGoPrev, canGoNext) {
                 detectHorizontalDragGestures(
                     onDragEnd = {
-                        if (dragOffset > swipeThreshold) prevMonth()
-                        else if (dragOffset < -swipeThreshold) nextMonth()
-                        dragOffset = 0f
+                        val over = dragOffset > swipeThreshold
+                        val under = dragOffset < -swipeThreshold
+                        scope.launch {
+                            when {
+                                over && canGoPrev -> {
+                                    // 甩出当前月 → 切上一月 → 新月滑入
+                                    animateDragTo(slideDistancePx)
+                                    prevMonth()
+                                    dragOffset = -slideDistancePx
+                                    animateDragTo(0f)
+                                }
+                                under && canGoNext -> {
+                                    animateDragTo(-slideDistancePx)
+                                    nextMonth()
+                                    dragOffset = slideDistancePx
+                                    animateDragTo(0f)
+                                }
+                                else -> animateDragTo(0f, springBack = true)
+                            }
+                        }
+                    },
+                    onDragCancel = {
+                        scope.launch { animateDragTo(0f, springBack = true) }
                     },
                     onHorizontalDrag = { _, dragAmount -> dragOffset += dragAmount }
                 )
@@ -130,17 +175,21 @@ fun CalendarPicker(
         }
 
         val monthKey = currentYear * 100 + currentMonth
-        val slideAnimSpec = spring<IntOffset>(dampingRatio = 0.8f, stiffness = 300f)
-        AnimatedContent(
-            targetState = monthKey,
-            transitionSpec = {
-                val dir = if (targetState > initialState) 1 else -1
-                (slideInHorizontally(slideAnimSpec) { it / 3 * dir } + fadeIn(spring(dampingRatio = 0.9f, stiffness = 400f)))
-                    .togetherWith(slideOutHorizontally(slideAnimSpec) { -it / 3 * dir } + fadeOut(spring(dampingRatio = 0.9f, stiffness = 400f)))
-            },
-            label = "monthSlide"
+        // 位移由外层 dragOffset 驱动（graphicsLayer 合成变换），内容切换仅淡入淡出避免双重位移
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer { translationX = dragOffset }
         ) {
-            MonthGrid(currentYear, currentMonth, todayMillis, semesterStartMillis, currentWeek, onDayClick, onDayLongPress)
+            AnimatedContent(
+                targetState = monthKey,
+                transitionSpec = {
+                    fadeIn(tween(durationMillis = 140)).togetherWith(fadeOut(tween(durationMillis = 140)))
+                },
+                label = "monthFade"
+            ) {
+                MonthGrid(currentYear, currentMonth, todayMillis, semesterStartMillis, currentWeek, onDayClick, onDayLongPress)
+            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))

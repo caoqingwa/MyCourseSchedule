@@ -14,9 +14,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -42,6 +45,10 @@ fun SettingsScreen(
     onOpenSemesterSetup: () -> Unit,
     onClearAll: () -> Unit
 ) {
+    val outerDensity = LocalDensity.current
+    // 全局已应用的字体倍率（含系统 + 存储值）
+    val storedScale by SettingsPrefs.fontScale.collectAsStateWithLifecycle()
+    // 拖动中的本地预览值：仅覆盖本页，避免每帧写全局触发全 App 重排
     var fontScale by remember { mutableFloatStateOf(SettingsPrefs.getFontScale()) }
     var showClearConfirm by remember { mutableStateOf(false) }
     var checkState by remember { mutableStateOf<UpdateCheckState>(UpdateCheckState.Idle) }
@@ -64,6 +71,12 @@ fun SettingsScreen(
         )
     }
 
+    CompositionLocalProvider(
+        LocalDensity provides Density(
+            density = outerDensity.density,
+            fontScale = outerDensity.fontScale / storedScale.coerceAtLeast(0.1f) * fontScale
+        )
+    ) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -100,10 +113,9 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Slider(
                         value = fontScale,
-                        onValueChange = {
-                            fontScale = it
-                            SettingsPrefs.setFontScale(it)
-                        },
+                        // 拖动仅更新本地预览；松手一次提交全局，避免每帧全局 Density 重排
+                        onValueChange = { fontScale = it },
+                        onValueChangeFinished = { SettingsPrefs.setFontScale(fontScale) },
                         valueRange = 0.8f..1.4f,
                         steps = 5
                     )
@@ -203,5 +215,6 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
         }
+    }
     }
 }

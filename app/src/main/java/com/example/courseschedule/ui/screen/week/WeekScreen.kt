@@ -16,7 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -24,7 +23,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -41,9 +39,9 @@ import com.example.courseschedule.ui.component.SemesterSetupDialog
 import com.example.courseschedule.ui.component.WeekGrid
 import com.example.courseschedule.ui.navigation.NavigationState
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -221,15 +219,14 @@ fun WeekScreen(
     fun switchToWeek(target: Int) {
         val clamped = target.coerceIn(1, state.totalWeeks)
         if (clamped == state.selectedWeek) return
-        scope.launch {
-            switcherState.animateSwitch(
-                fromWeek = state.selectedWeek,
-                toWeek = clamped,
-                totalWeeks = state.totalWeeks,
-                screenWidthPx = screenWidthPx,
-                onSwap = { viewModel.selectWeek(clamped) }
-            )
-        }
+        switcherState.startSwitch(
+            fromWeek = state.selectedWeek,
+            toWeek = clamped,
+            totalWeeks = state.totalWeeks,
+            screenWidthPx = screenWidthPx,
+            scope = scope,
+            onSwap = { viewModel.selectWeek(it) }
+        )
     }
 
     Scaffold(
@@ -261,12 +258,9 @@ fun WeekScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .offset { IntOffset(switcherState.offset.value.roundToInt(), 0) }
                                 .graphicsLayer {
-                                    scaleX = switcherState.scale.value
-                                    scaleY = switcherState.scale.value
+                                    translationX = switcherState.offset
                                 }
-                                .alpha(switcherState.alpha.value)
                                 .pointerInput(state.totalWeeks) {
                                     detectHorizontalDragGestures(
                                         onDragStart = { switcherState.onDragStart() },
@@ -292,8 +286,7 @@ fun WeekScreen(
                                                 delta = dragAmount,
                                                 screenWidthPx = screenWidthPx,
                                                 atBoundary = (dragAmount > 0 && state.selectedWeek <= 1) ||
-                                                        (dragAmount < 0 && state.selectedWeek >= state.totalWeeks),
-                                                scope = scope
+                                                        (dragAmount < 0 && state.selectedWeek >= state.totalWeeks)
                                             )
                                         }
                                     )
@@ -407,109 +400,141 @@ fun WeekScreen(
 
 @Stable
 private class WeekSwitcherState {
-    val offset = Animatable(0f)
-    val alpha = Animatable(1f)
-    val scale = Animatable(1f)
+    // 跟手位移：普通 State 同步写（拖动零协程分配），UI 由 graphicsLayer.translationX 消费，
+    // 走 GPU 合成层变换，避免每帧整树重绘。
+    var offset by mutableFloatStateOf(0f)
 
+    // 换页采用单一 X 位移动画（滑出旧页 → 屏外换数据 → 滑入新页），全程无 alpha 空窗，
+    // 消除旧实现"弹回 + 淡出 + 换数据 + 淡入"两套动画叠加造成的停顿与内容突变。
     private var animating = false
-    private var pendingSwipes = 0
-    private var lastDragDelta = 0f
-    private var lastDragTime = 0L
+    private var pendingDir = 0
+    private var switchJob: Job? = null
     var lastTarget: Int? = null
         private set
 
-    private val pageSpring = spring<Float>(
-        dampingRatio = 0.9f,
-        stiffness = Spring.StiffnessMediumLow
-    )
+    // 速度估算窗口：累计一个冲程（停顿超过 120ms 视为新冲程）内的位移与耗时
+    private var velStart = 0L
+    private var velAcc = 0f
 
-    suspend fun animateSwitch(
+    private val slideOutSpec = tween<Float>(110, easing = FastOutLinearInEasing)
+    private val slideInSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 900f)
+    private val snapSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 1100f)
+
+    fun startSwitch(
         fromWeek: Int,
         toWeek: Int,
         totalWeeks: Int,
         screenWidthPx: Float,
-        onSwap: () -> Unit
+        scope: CoroutineScope,
+        onSwap: (Int) -> Unit
     ) {
         if (animating) {
-            pendingSwipes += if (toWeek > fromWeek) 1 else -1
+            // 动画中再触发（按钮连点/手势连滑）：记录相对方向，结束后衔接继续翻页
+            pendingDir = (pendingDir + (toWeek - fromWeek).coerceIn(-1, 1)).coerceIn(-3, 3)
             return
         }
         animating = true
-        // Phase 1: current page fades out + shrinks
-        coroutineScope {
-            launch { alpha.animateTo(0f, pageSpring) }
-            launch { scale.animateTo(0.85f, pageSpring) }
+        switchJob = scope.launch {
+            try {
+                runSwitchCore(fromWeek, toWeek, totalWeeks, screenWidthPx, onSwap)
+            } finally {
+                // 被手势打断（cancel）时保留当前 offset 供跟手续拖；正常完成则归位
+                if (coroutineContext.isActive) offset = 0f
+                animating = false
+                switchJob = null
+            }
         }
-        // Phase 2: swap data
-        onSwap()
-        alpha.snapTo(0f)
-        scale.snapTo(1.15f)
-        // Phase 3: new page fades in + scales to normal
-        coroutineScope {
-            launch { alpha.animateTo(1f, pageSpring) }
-            launch { scale.animateTo(1f, pageSpring) }
-        }
-        animating = false
-        // Process pending swipes
-        if (pendingSwipes != 0) {
-            val remaining = pendingSwipes
-            pendingSwipes = 0
-            val next = (toWeek + remaining).coerceIn(1, totalWeeks)
-            if (next != toWeek) lastTarget = next
+    }
+
+    private suspend fun runSwitchCore(
+        fromWeek: Int,
+        toWeek: Int,
+        totalWeeks: Int,
+        width: Float,
+        onSwap: (Int) -> Unit
+    ) {
+        var cur = fromWeek
+        var target = toWeek
+        while (true) {
+            val dir = if (target > cur) 1 else -1
+            // 旧页沿手势方向继续滑出屏幕（dir=+1 向左出，新页从右侧进入）
+            val out = Animatable(offset)
+            out.animateTo(-dir * width, slideOutSpec) { offset = value }
+            // 在屏幕外换数据，再把新页放到手势来源侧屏外滑入
+            onSwap(target)
+            val incoming = Animatable(dir * width)
+            incoming.animateTo(0f, slideInSpring) { offset = value }
+            cur = target
+            val pending = pendingDir
+            pendingDir = 0
+            if (pending == 0) break
+            val next = (cur + pending).coerceIn(1, totalWeeks)
+            if (next == cur) break
+            target = next
         }
     }
 
     fun onDragStart() {
-        if (!animating) pendingSwipes = 0
+        // 动画中开始新拖动：中断换页动画，offset 停在当前值直接跟手
+        if (animating) {
+            switchJob?.cancel()
+            switchJob = null
+            animating = false
+            pendingDir = 0
+        }
     }
 
-    fun onDrag(delta: Float, screenWidthPx: Float, atBoundary: Boolean, scope: CoroutineScope) {
+    fun onDrag(delta: Float, screenWidthPx: Float, atBoundary: Boolean) {
         if (animating) return
+        val now = System.nanoTime()
+        if (velStart == 0L || now - velStart > 120_000_000L) {
+            velStart = now
+            velAcc = 0f
+        }
+        velAcc += delta
         val damped = if (atBoundary) delta * 0.25f else delta
-        val newTarget = (offset.targetValue + damped).coerceIn(
+        offset = (offset + damped).coerceIn(
             -screenWidthPx * 0.5f, screenWidthPx * 0.5f
         )
-        scope.launch { offset.snapTo(newTarget) }
-        lastDragDelta = delta
-        lastDragTime = System.nanoTime()
     }
 
     fun onDragEnd(screenWidthPx: Float, currentWeek: Int, totalWeeks: Int, scope: CoroutineScope): Boolean {
-        val dThresh = screenWidthPx * 0.15f
-        val vThresh = 400f
-        val elapsed = ((System.nanoTime() - lastDragTime) / 1_000_000f).coerceAtLeast(1f)
-        val velocity = lastDragDelta / (elapsed / 1000f)
-        val goRight = offset.value < -dThresh || velocity < -vThresh
-        val goLeft = offset.value > dThresh || velocity > vThresh
+        val now = System.nanoTime()
+        val dtMs = if (velStart != 0L) (now - velStart) / 1_000_000f else 0f
+        val velocity = if (dtMs >= 40f) velAcc / (dtMs / 1000f) else 0f
+        velStart = 0L
+        velAcc = 0f
+        if (animating) return false // 位移归换页动画管，无需回弹
+        val dThresh = screenWidthPx * 0.12f
+        val goRight = offset < -dThresh || velocity < -900f
+        val goLeft = offset > dThresh || velocity > 900f
         if (goRight || goLeft) {
             val delta = if (goRight) 1 else -1
-            if (animating) {
-                pendingSwipes += delta
-                scope.launch { offset.animateTo(0f, pageSpring) }
-                return false
-            }
             val target = (currentWeek + delta).coerceIn(1, totalWeeks)
             if (target != currentWeek) {
                 lastTarget = target
-                scope.launch { offset.animateTo(0f, pageSpring) }
+                // 不再回弹：由 startSwitch 从当前 offset 续滑完成整页切换
                 return true
             }
         }
-        // Not enough drag — snap back
-        if (!animating) {
-            scope.launch { offset.animateTo(0f, pageSpring) }
-        }
+        launchSnapBack(scope)
         return false
     }
 
     fun onDragCancel(scope: CoroutineScope) {
-        if (!animating) {
-            scope.launch { offset.animateTo(0f, pageSpring) }
-        }
+        if (!animating) launchSnapBack(scope)
     }
 
     fun clearTarget() {
         lastTarget = null
+    }
+
+    // 手势未达标/取消才启动一次回弹动画（非每帧），结果写回 offset State
+    private fun launchSnapBack(scope: CoroutineScope) {
+        scope.launch {
+            val anim = Animatable(offset)
+            anim.animateTo(0f, snapSpring) { offset = value }
+        }
     }
 }
 

@@ -89,9 +89,9 @@ fun WeekGrid(
         times.map { it.start } to times.map { it.end }
     }
 
-    val schedulesKey = schedules.hashCode()
-    val coursesKey = courses.hashCode()
-    val colBlocks = remember(schedulesKey, coursesKey, totalPeriods, colCount) { Array(colCount) { col ->
+    // remember key 直接用对象引用（List/Map equals）：同周切回命中缓存，内容变化深比一次；
+    // 避免 hashCode 作 key 的碰撞风险与每次重组 O(n) 重算
+    val colBlocks = remember(schedules, courses, totalPeriods, colCount) { Array(colCount) { col ->
         val daySchedules = schedules.filter { it.dayOfWeek == col + 1 }.sortedBy { it.startPeriod }
         val groups = daySchedules.groupBy { it.courseId * 100000 + it.weekType * 10000 + it.startWeek * 100 + it.endWeek }
         val result = mutableListOf<MergedBlock>()
@@ -109,11 +109,11 @@ fun WeekGrid(
         result.sortedBy { it.startPeriod } } }
 
     // 为所有课程名生成唯一颜色映射
-    val courseColorMap = remember(coursesKey) {
+    val courseColorMap = remember(courses) {
         buildCourseColorMap(courses.values.map { it.name })
     }
 
-    val occupied = remember(schedulesKey, coursesKey, totalPeriods, colCount) {
+    val occupied = remember(schedules, courses, totalPeriods, colCount) {
         Array(totalPeriods) { row ->
             BooleanArray(colCount) { col -> colBlocks[col].any { it.startPeriod <= row + 1 && it.endPeriod >= row + 1 } }
         }
