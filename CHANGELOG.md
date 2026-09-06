@@ -1,5 +1,10 @@
 # CourseSchedule 更新日志
 
+## v2.12 (2026-09-06)
+
+### 工程与发布
+- 新增 GitHub Actions 自动发版流程：推送 `v*` tag 后自动校验版本号、构建 release APK 并发布 GitHub Release，无需手动上传安装包
+
 ## v2.11 (2026-09-05)
 
 ### 周课表滑动流畅性重构
