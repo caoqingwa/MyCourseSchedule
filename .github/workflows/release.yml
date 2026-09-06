@@ -1,0 +1,80 @@
+name: 发版 Release
+
+# 推送形如 v2.12 的 tag 时，自动构建 APK 并发布 GitHub Release
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # 安装 Android SDK 命令行工具并接受全部许可证
+      # 缺失的 platforms/build-tools 会在构建时由 AGP 自动下载
+      - uses: android-actions/setup-android@v3
+
+      - name: 校验 tag 与 versionName 一致
+        run: |
+          expected="${GITHUB_REF_NAME#v}"
+          actual="$(sed -n 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' app/build.gradle.kts)"
+          if [ -z "$actual" ]; then
+            echo "::error::未能从 app/build.gradle.kts 解析 versionName"
+            exit 1
+          fi
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::tag 为 v$expected，但 app/build.gradle.kts 的 versionName 为 \"$actual\"，请先同步修改再打 tag"
+            exit 1
+          fi
+          echo "版本号校验通过：v$actual"
+
+      - name: 从 CHANGELOG.md 提取发布说明
+        run: |
+          awk -v tag="$GITHUB_REF_NAME" '
+            $0 ~ "^## " tag "([ (]|$)" { found = 1; next }
+            found && /^## / { exit }
+            found
+          ' CHANGELOG.md > notes-body.md
+          if [ ! -s notes-body.md ]; then
+            echo "::error::CHANGELOG.md 中找不到 $GITHUB_REF_NAME 章节，请先补充更新日志"
+            exit 1
+          fi
+          {
+            printf '# CourseSchedule 更新日志\n\n'
+            printf '## %s (%s)\n\n' "$GITHUB_REF_NAME" "$(date +%F)"
+            cat notes-body.md
+          } > release-notes.md
+
+      # 本机 ~/.android/debug.keystore 的 base64，保证 CI 签名与现网安装包一致、可覆盖升级
+      - name: 还原签名 keystore
+        env:
+          KS_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KS_B64" ]; then
+            echo "::error::仓库未配置 secret ANDROID_DEBUG_KEYSTORE_B64（本机 ~/.android/debug.keystore 的 base64），无法发版"
+            exit 1
+          fi
+          mkdir -p "$HOME/.android"
+          printf '%s' "$KS_B64" | base64 -d > "$HOME/.android/debug.keystore"
+
+      - name: 构建 release APK
+        run: ./gradlew :app:assembleRelease
+
+      - name: 重命名 APK
+        run: mv app/build/outputs/apk/release/app-release.apk "${GITHUB_REF_NAME}.apk"
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          files: ${{ github.ref_name }}.apk
