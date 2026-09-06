@@ -67,6 +67,10 @@ jobs:
           mkdir -p "$HOME/.android"
           printf '%s' "$KS_B64" | base64 -d > "$HOME/.android/debug.keystore"
 
+      # Android Studio 自动生成的本机 daemon JVM 锁定（Java 20/oracle），CI 上删除以使用 JAVA_HOME(JDK 17)
+      - name: 清理本机 Gradle JDK 锁定
+        run: rm -f gradle/gradle-daemon-jvm.properties
+
       - name: 构建 release APK
         run: ./gradlew :app:assembleRelease
 
