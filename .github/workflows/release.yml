@@ -71,6 +71,10 @@ jobs:
       - name: 清理本机 Gradle JDK 锁定
         run: rm -f gradle/gradle-daemon-jvm.properties
 
+      # maven.aliyun.com 在 GitHub 海外 runner 上返回 502（本地 CN 正常），构建时临时移除、仅走官方仓库
+      - name: CI 环境移除 aliyun 镜像
+        run: sed -i '/maven\.aliyun\.com/d' settings.gradle.kts
+
       - name: 构建 release APK
         run: ./gradlew :app:assembleRelease
 
