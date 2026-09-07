@@ -216,7 +216,7 @@ fun MainApp() {
                 editTarget = null
             },
             onDelete = {
-                weekViewModel.deleteCourse(targetCourse.id)
+                weekViewModel.deleteSchedule(targetSchedule.id)
                 editTarget = null
             }
         )

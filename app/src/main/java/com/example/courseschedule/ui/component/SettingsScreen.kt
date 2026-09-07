@@ -7,6 +7,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.TextFields
@@ -14,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
@@ -23,13 +25,22 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.example.courseschedule.util.AppUpdater
 import com.example.courseschedule.util.SettingsPrefs
 import com.example.courseschedule.util.VersionChecker
+import java.io.File
 
 private sealed interface UpdateCheckState {
     data object Idle : UpdateCheckState
     data object Checking : UpdateCheckState
     data class Result(val latest: String, val hasUpdate: Boolean) : UpdateCheckState
+    /** 正在下载 {latest} 的 APK */
+    data class Downloading(val latest: String) : UpdateCheckState
+    data class DownloadFailed(val latest: String) : UpdateCheckState
+    /** 已下载完成，等待用户点击安装 */
+    data class ReadyToInstall(val latest: String, val file: File) : UpdateCheckState
+    /** 系统未授予"安装未知应用"，需先跳授权页 */
+    data class PermissionNeeded(val latest: String, val file: File) : UpdateCheckState
     data object Failed : UpdateCheckState
 }
 
@@ -53,6 +64,30 @@ fun SettingsScreen(
     var showClearConfirm by remember { mutableStateOf(false) }
     var checkState by remember { mutableStateOf<UpdateCheckState>(UpdateCheckState.Idle) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    // 下载 {tag} 对应 APK：成功且已授权则直接唤起安装器，否则转入待授权
+    val startDownload: (String) -> Unit = { tag ->
+        checkState = UpdateCheckState.Downloading(tag)
+        scope.launch {
+            val file = withContext(Dispatchers.IO) { AppUpdater.downloadApk(context, tag) }
+            checkState = when {
+                file == null -> UpdateCheckState.DownloadFailed(tag)
+                !AppUpdater.canRequestInstalls(context) -> UpdateCheckState.PermissionNeeded(tag, file)
+                AppUpdater.launchInstaller(context, file) -> UpdateCheckState.Idle
+                else -> UpdateCheckState.DownloadFailed(tag)
+            }
+        }
+    }
+
+    // 用户主动点安装：权限已授予则唤起安装器，否则跳授权页
+    val installApk: (String, File) -> Unit = { tag, file ->
+        checkState = when {
+            !AppUpdater.canRequestInstalls(context) -> UpdateCheckState.PermissionNeeded(tag, file)
+            AppUpdater.launchInstaller(context, file) -> UpdateCheckState.Idle
+            else -> UpdateCheckState.DownloadFailed(tag)
+        }
+    }
 
     if (showClearConfirm) {
         AlertDialog(
@@ -170,7 +205,7 @@ fun SettingsScreen(
                                 }
                             }
                         },
-                        enabled = checkState !is UpdateCheckState.Checking,
+                        enabled = checkState !is UpdateCheckState.Checking && checkState !is UpdateCheckState.Downloading,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -178,15 +213,84 @@ fun SettingsScreen(
                         Text(if (checkState is UpdateCheckState.Checking) "\u68c0\u67e5\u4e2d..." else "\u68c0\u67e5\u66f4\u65b0", fontSize = 14.sp)
                     }
                     when (val s = checkState) {
-                        is UpdateCheckState.Result -> Text(
-                            if (s.hasUpdate) {
-                                "\u53d1\u73b0\u65b0\u7248\u672c ${s.latest}\uff0c\u8bf7\u5230 GitHub \u4e0b\u8f7d\u5b89\u88c5"
-                            } else "\u5f53\u524d\u5df2\u662f\u6700\u65b0\u7248\u672c",
+                        is UpdateCheckState.Result -> if (s.hasUpdate) {
+                            Text(
+                                "发现新版本 ${s.latest}，可直接下载安装",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            OutlinedButton(
+                                onClick = { startDownload(s.latest) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("下载并安装", fontSize = 14.sp)
+                            }
+                        } else {
+                            Text(
+                                "当前已是最新版本",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        is UpdateCheckState.Downloading -> Text(
+                            "正在下载 ${s.latest} APK，请稍候…",
                             fontSize = 12.sp,
-                            color = if (s.hasUpdate) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.primary
                         )
+                        is UpdateCheckState.DownloadFailed -> {
+                            Text(
+                                "下载或安装失败，请检查网络后重试",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            OutlinedButton(
+                                onClick = { startDownload(s.latest) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("重试", fontSize = 14.sp)
+                            }
+                        }
+                        is UpdateCheckState.ReadyToInstall -> {
+                            Text(
+                                "新版本 ${s.latest} 已下载完成",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedButton(
+                                    onClick = { installApk(s.latest, s.file) },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("立即安装", fontSize = 14.sp)
+                                }
+                                TextButton(onClick = { checkState = UpdateCheckState.Idle }) { Text("取消") }
+                            }
+                        }
+                        is UpdateCheckState.PermissionNeeded -> {
+                            Text(
+                                "安装前需要允许「安装未知应用」，请先完成授权",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(onClick = { AppUpdater.openInstallPermissionSettings(context) }) { Text("去授权") }
+                                OutlinedButton(
+                                    onClick = { installApk(s.latest, s.file) },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("我已授权，安装", fontSize = 14.sp)
+                                }
+                                TextButton(
+                                    onClick = { checkState = UpdateCheckState.ReadyToInstall(s.latest, s.file) }
+                                ) { Text("稍后") }
+                            }
+                        }
                         UpdateCheckState.Failed -> Text(
-                            "\u68c0\u67e5\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc",
+                            "检查失败，请检查网络",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.error
                         )

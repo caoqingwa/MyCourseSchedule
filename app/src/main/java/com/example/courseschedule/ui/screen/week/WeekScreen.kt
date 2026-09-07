@@ -3,9 +3,9 @@ package com.example.courseschedule.ui.screen.week
 import android.annotation.SuppressLint
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -16,12 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,9 +33,7 @@ import com.example.courseschedule.ui.component.EditCourseDialog
 import com.example.courseschedule.ui.component.SemesterSetupDialog
 import com.example.courseschedule.ui.component.WeekGrid
 import com.example.courseschedule.ui.navigation.NavigationState
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.isActive
+import com.example.courseschedule.util.DateUtils
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -211,22 +204,40 @@ fun WeekScreen(
         )
     }
 
-    val density = LocalDensity.current
-    val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
+    // 每周一页的官方 Pager：拖动时相邻两周始终并排可见，彻底消除单页滑动方案的空背景黑屏
+    val pagerState = rememberPagerState(
+        initialPage = (state.selectedWeek - 1).coerceAtLeast(0)
+    ) { state.totalWeeks.coerceAtLeast(1) }
+    // 首次真实学期数据就位前不做跳页动画，避免首屏横跳
+    var pagerReady by remember { mutableStateOf(false) }
 
-    val switcherState = rememberWeekSwitcherState()
+    // selectedWeek（VM）是唯一事实源：日历跳转/"本周"/周导航按钮经 selectWeek 驱动 Pager 滚动
+    var suppressPagerSync by remember { mutableStateOf(false) }
+    LaunchedEffect(state.selectedWeek, state.totalWeeks, state.semester) {
+        if (state.semester == null || state.totalWeeks < 1) return@LaunchedEffect
+        val target = (state.selectedWeek - 1).coerceIn(0, state.totalWeeks - 1)
+        if (pagerState.currentPage != target) {
+            suppressPagerSync = true
+            try {
+                // 首次数据就位用 scrollToPage 直接跳（无动画），之后外部跳转走动画
+                if (pagerReady) pagerState.animateScrollToPage(target) else pagerState.scrollToPage(target)
+            } finally {
+                suppressPagerSync = false
+            }
+        }
+        pagerReady = true
+    }
+
+    // 手势/惯性翻页越过页中点后写回 VM；程序性滚动期间抑制，避免顶部周次被中间页刷掉
+    LaunchedEffect(pagerState.currentPage) {
+        if (!suppressPagerSync && state.semester != null) {
+            viewModel.selectWeek(pagerState.currentPage + 1)
+        }
+    }
 
     fun switchToWeek(target: Int) {
         val clamped = target.coerceIn(1, state.totalWeeks)
-        if (clamped == state.selectedWeek) return
-        switcherState.startSwitch(
-            fromWeek = state.selectedWeek,
-            toWeek = clamped,
-            totalWeeks = state.totalWeeks,
-            screenWidthPx = screenWidthPx,
-            scope = scope,
-            onSwap = { viewModel.selectWeek(it) }
-        )
+        if (clamped != state.selectedWeek) viewModel.selectWeek(clamped)
     }
 
     Scaffold(
@@ -251,56 +262,35 @@ fun WeekScreen(
                 )
 
                 Box(modifier = Modifier.weight(1f)) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .graphicsLayer {
-                                    translationX = switcherState.offset
-                                }
-                                .pointerInput(state.totalWeeks) {
-                                    detectHorizontalDragGestures(
-                                        onDragStart = { switcherState.onDragStart() },
-                                        onDragEnd = {
-                                            val consumed = switcherState.onDragEnd(
-                                                screenWidthPx = screenWidthPx,
-                                                currentWeek = state.selectedWeek,
-                                                totalWeeks = state.totalWeeks,
-                                                scope = scope
-                                            )
-                                            if (consumed) {
-                                                val target = switcherState.lastTarget
-                                                if (target != null) {
-                                                    switchToWeek(target)
-                                                    switcherState.clearTarget()
-                                                }
-                                            }
-                                        },
-                                        onDragCancel = { switcherState.onDragCancel(scope) },
-                                        onHorizontalDrag = { change, dragAmount ->
-                                            change.consume()
-                                            switcherState.onDrag(
-                                                delta = dragAmount,
-                                                screenWidthPx = screenWidthPx,
-                                                atBoundary = (dragAmount > 0 && state.selectedWeek <= 1) ||
-                                                        (dragAmount < 0 && state.selectedWeek >= state.totalWeeks)
-                                            )
-                                        }
-                                    )
-                                }
+                    // 各周页共享同一竖向滚动位置：横向换页不打断阅读进度
+                    val weekScroll = rememberScrollState()
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize(),
+                        beyondViewportPageCount = 1
+                    ) { pageIndex ->
+                        val week = pageIndex + 1
+                        // 每页只渲染该周生效的时段（与 ViewModel.buildWeekPage 同一过滤规则）
+                        val active = remember(week, state.allSchedules) {
+                            state.allSchedules.filter {
+                                DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, week)
+                            }
+                        }
+                        val courses = remember(week, active, state.allCourseMap) {
+                            active.mapNotNull { state.allCourseMap[it.courseId] }.associateBy { it.id }
+                        }
+                        Column(
+                            modifier = Modifier.fillMaxSize().verticalScroll(weekScroll)
                         ) {
                             WeekGrid(
-                                schedules = state.currentPage.schedules,
-                                courses = state.currentPage.courseMap,
+                                schedules = active,
+                                courses = courses,
                                 roomMap = state.currentPage.roomMap,
                                 semester = state.semester,
                                 currentDayOfWeek = state.currentDayOfWeek,
                                 highlightDayOfWeek = if (state.highlightDayOfWeek > 0) state.highlightDayOfWeek
-                                    else if (state.selectedWeek == state.currentWeek) state.currentDayOfWeek else 0,
-                                selectedWeek = state.selectedWeek,
+                                    else if (week == state.currentWeek) state.currentDayOfWeek else 0,
+                                selectedWeek = week,
                                 modifier = Modifier.fillMaxWidth(),
                                 onCellClick = { course, _ -> onCourseClick(course.id) },
                                 onCellLongClick = { day, period ->
@@ -368,7 +358,7 @@ fun WeekScreen(
                 showEditDialog = false; editCourse = null; editSchedule = null
             },
             onDelete = {
-                viewModel.deleteCourse(course.id)
+                viewModel.deleteSchedule(sched.id)
                 showEditDialog = false; editCourse = null; editSchedule = null
             }
         )
@@ -394,153 +384,6 @@ fun WeekScreen(
             }
         )
     }
-}
-
-// ── WeekSwitcherState ────────────────────────────────────────────────
-
-@Stable
-private class WeekSwitcherState {
-    // 跟手位移：普通 State 同步写（拖动零协程分配），UI 由 graphicsLayer.translationX 消费，
-    // 走 GPU 合成层变换，避免每帧整树重绘。
-    var offset by mutableFloatStateOf(0f)
-
-    // 换页采用单一 X 位移动画（滑出旧页 → 屏外换数据 → 滑入新页），全程无 alpha 空窗，
-    // 消除旧实现"弹回 + 淡出 + 换数据 + 淡入"两套动画叠加造成的停顿与内容突变。
-    private var animating = false
-    private var pendingDir = 0
-    private var switchJob: Job? = null
-    var lastTarget: Int? = null
-        private set
-
-    // 速度估算窗口：累计一个冲程（停顿超过 120ms 视为新冲程）内的位移与耗时
-    private var velStart = 0L
-    private var velAcc = 0f
-
-    private val slideOutSpec = tween<Float>(110, easing = FastOutLinearInEasing)
-    private val slideInSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 900f)
-    private val snapSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 1100f)
-
-    fun startSwitch(
-        fromWeek: Int,
-        toWeek: Int,
-        totalWeeks: Int,
-        screenWidthPx: Float,
-        scope: CoroutineScope,
-        onSwap: (Int) -> Unit
-    ) {
-        if (animating) {
-            // 动画中再触发（按钮连点/手势连滑）：记录相对方向，结束后衔接继续翻页
-            pendingDir = (pendingDir + (toWeek - fromWeek).coerceIn(-1, 1)).coerceIn(-3, 3)
-            return
-        }
-        animating = true
-        switchJob = scope.launch {
-            try {
-                runSwitchCore(fromWeek, toWeek, totalWeeks, screenWidthPx, onSwap)
-            } finally {
-                // 被手势打断（cancel）时保留当前 offset 供跟手续拖；正常完成则归位
-                if (coroutineContext.isActive) offset = 0f
-                animating = false
-                switchJob = null
-            }
-        }
-    }
-
-    private suspend fun runSwitchCore(
-        fromWeek: Int,
-        toWeek: Int,
-        totalWeeks: Int,
-        width: Float,
-        onSwap: (Int) -> Unit
-    ) {
-        var cur = fromWeek
-        var target = toWeek
-        while (true) {
-            val dir = if (target > cur) 1 else -1
-            // 旧页沿手势方向继续滑出屏幕（dir=+1 向左出，新页从右侧进入）
-            val out = Animatable(offset)
-            out.animateTo(-dir * width, slideOutSpec) { offset = value }
-            // 在屏幕外换数据，再把新页放到手势来源侧屏外滑入
-            onSwap(target)
-            val incoming = Animatable(dir * width)
-            incoming.animateTo(0f, slideInSpring) { offset = value }
-            cur = target
-            val pending = pendingDir
-            pendingDir = 0
-            if (pending == 0) break
-            val next = (cur + pending).coerceIn(1, totalWeeks)
-            if (next == cur) break
-            target = next
-        }
-    }
-
-    fun onDragStart() {
-        // 动画中开始新拖动：中断换页动画，offset 停在当前值直接跟手
-        if (animating) {
-            switchJob?.cancel()
-            switchJob = null
-            animating = false
-            pendingDir = 0
-        }
-    }
-
-    fun onDrag(delta: Float, screenWidthPx: Float, atBoundary: Boolean) {
-        if (animating) return
-        val now = System.nanoTime()
-        if (velStart == 0L || now - velStart > 120_000_000L) {
-            velStart = now
-            velAcc = 0f
-        }
-        velAcc += delta
-        val damped = if (atBoundary) delta * 0.25f else delta
-        offset = (offset + damped).coerceIn(
-            -screenWidthPx * 0.5f, screenWidthPx * 0.5f
-        )
-    }
-
-    fun onDragEnd(screenWidthPx: Float, currentWeek: Int, totalWeeks: Int, scope: CoroutineScope): Boolean {
-        val now = System.nanoTime()
-        val dtMs = if (velStart != 0L) (now - velStart) / 1_000_000f else 0f
-        val velocity = if (dtMs >= 40f) velAcc / (dtMs / 1000f) else 0f
-        velStart = 0L
-        velAcc = 0f
-        if (animating) return false // 位移归换页动画管，无需回弹
-        val dThresh = screenWidthPx * 0.12f
-        val goRight = offset < -dThresh || velocity < -900f
-        val goLeft = offset > dThresh || velocity > 900f
-        if (goRight || goLeft) {
-            val delta = if (goRight) 1 else -1
-            val target = (currentWeek + delta).coerceIn(1, totalWeeks)
-            if (target != currentWeek) {
-                lastTarget = target
-                // 不再回弹：由 startSwitch 从当前 offset 续滑完成整页切换
-                return true
-            }
-        }
-        launchSnapBack(scope)
-        return false
-    }
-
-    fun onDragCancel(scope: CoroutineScope) {
-        if (!animating) launchSnapBack(scope)
-    }
-
-    fun clearTarget() {
-        lastTarget = null
-    }
-
-    // 手势未达标/取消才启动一次回弹动画（非每帧），结果写回 offset State
-    private fun launchSnapBack(scope: CoroutineScope) {
-        scope.launch {
-            val anim = Animatable(offset)
-            anim.animateTo(0f, snapSpring) { offset = value }
-        }
-    }
-}
-
-@Composable
-private fun rememberWeekSwitcherState(): WeekSwitcherState {
-    return remember { WeekSwitcherState() }
 }
 
 // ── WeekNavigationBar ────────────────────────────────────────────────

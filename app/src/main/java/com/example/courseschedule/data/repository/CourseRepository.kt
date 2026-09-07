@@ -88,10 +88,14 @@ class CourseRepository @Inject constructor(
     suspend fun deleteExam(exam: Exam) = examDao.delete(exam)
     suspend fun deleteExpiredExams() = examDao.deleteExpired(System.currentTimeMillis())
 
+    /** 删除单个排课时段；若该课程已无其他时段则连同课程一并删除 */
     @Transaction
-    suspend fun deleteCourseWithSchedules(courseId: Long) {
-        scheduleDao.deleteByCourseId(courseId)
-        courseDao.getById(courseId)?.let { courseDao.delete(it) }
+    suspend fun deleteScheduleWithCourseIfOrphan(scheduleId: Long) {
+        val schedule = scheduleDao.getById(scheduleId) ?: return
+        scheduleDao.delete(schedule)
+        if (scheduleDao.getByCourse(schedule.courseId).isEmpty()) {
+            courseDao.getById(schedule.courseId)?.let { courseDao.delete(it) }
+        }
     }
 
     @Transaction

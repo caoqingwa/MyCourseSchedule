@@ -226,9 +226,10 @@ class WeekViewModel @Inject constructor(
         }
     }
 
-    fun deleteCourse(courseId: Long) {
+    /** 删除编辑弹窗对应的单个排课时段；仅剩该时段时课程一并删除 */
+    fun deleteSchedule(scheduleId: Long) {
         viewModelScope.launch {
-            repository.deleteCourseWithSchedules(courseId)
+            repository.deleteScheduleWithCourseIfOrphan(scheduleId)
         }
     }
 

@@ -253,7 +253,7 @@ fun EditCourseDialog(
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("\u786e\u8ba4\u5220\u9664") },
-            text = { Text("\u786e\u5b9a\u8981\u5220\u9664\u8bfe\u7a0b\u300c${courseName}\u300d\u5417\uff1f\u6b64\u64cd\u4f5c\u4e0d\u53ef\u64a4\u9500\u3002") },
+            text = { Text("确定要删除「${courseName}」的这个排课时段吗？此操作不可撤销。") },
             confirmButton = {
                 TextButton(onClick = { onDelete(); showDeleteConfirm = false }) {
                     Text("\u5220\u9664", color = MaterialTheme.colorScheme.error)
