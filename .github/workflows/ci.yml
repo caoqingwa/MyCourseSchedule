@@ -35,9 +35,18 @@ jobs:
             yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
           fi
 
-      # Android Studio 自动生成的本机 daemon JVM 锁定（Java 20/oracle），CI 上删除以使用 JAVA_HOME(JDK 17)
+      # Android Studio 自动生成的本机 daemon JVM 锁定（Java 20/oracle），CI 上删除以使用 JAVA_HOME(JDK 17）
       - name: 清理本机 Gradle JDK 锁定
         run: rm -f gradle/gradle-daemon-jvm.properties
+
+      # assembleDebug 需要 debug 签名；CI 不需要真实发布密钥，生成一次性调试 keystore
+      - name: 生成调试 keystore
+        run: |
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -keystore "$HOME/.android/debug.keystore" \
+            -storepass android -alias androiddebugkey -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US" > /dev/null 2>&1
 
       # maven.aliyun.com 在 GitHub 海外 runner 上返回 502（本地 CN 正常），构建时临时移除、仅走官方仓库
       - name: CI 环境移除 aliyun 镜像
