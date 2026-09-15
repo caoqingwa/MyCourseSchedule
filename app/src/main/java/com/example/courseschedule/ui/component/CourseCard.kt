@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Schedule
+import com.example.courseschedule.data.db.entity.Semester
 import com.example.courseschedule.ui.theme.getCourseColorByName
 import com.example.courseschedule.util.DateUtils
 
@@ -26,7 +27,7 @@ import com.example.courseschedule.util.DateUtils
 data class CourseWithSchedule(val course: Course, val schedule: Schedule, val roomName: String? = null)
 
 @Composable
-fun CourseCard(item: CourseWithSchedule, isCurrent: Boolean, nextInfo: String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun CourseCard(item: CourseWithSchedule, isCurrent: Boolean, nextInfo: String?, semester: Semester?, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val (bg, fg) = getCourseColorByName(item.course.name)
     Column(
         modifier = modifier.fillMaxWidth()
@@ -46,7 +47,7 @@ fun CourseCard(item: CourseWithSchedule, isCurrent: Boolean, nextInfo: String?, 
                     Text(" \u2714 \u5f53\u524d ", fontSize = 10.sp, color = Color.White, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                 }
             }
-            Text(DateUtils.getPeriodTimeRangeStatic(item.schedule.startPeriod, item.schedule.endPeriod), fontSize = 12.sp, color = fg.copy(alpha = 0.7f))
+            Text(DateUtils.getPeriodTimeRange(item.schedule.startPeriod, item.schedule.endPeriod, semester), fontSize = 12.sp, color = fg.copy(alpha = 0.7f))
         }
         Spacer(modifier = Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {

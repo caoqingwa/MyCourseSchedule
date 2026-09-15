@@ -9,7 +9,7 @@ import com.example.courseschedule.data.db.entity.*
 
 @Database(
     entities = [Semester::class, Course::class, Schedule::class, Room::class, Exam::class],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -108,6 +108,14 @@ abstract class AppDatabase : RoomDatabase() {
                         SELECT roomId FROM courses WHERE courses.id = schedules.courseId
                     )
                 """)
+            }
+        }
+
+        // v8→v9：补查询索引——schedules.roomId（按时段取教室）、exams.examDate（未过期考试查询/清理）
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_schedules_roomId ON schedules(roomId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_exams_examDate ON exams(examDate)")
             }
         }
     }

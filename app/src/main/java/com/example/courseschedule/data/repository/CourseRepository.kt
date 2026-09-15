@@ -69,9 +69,14 @@ class CourseRepository @Inject constructor(
     suspend fun deleteSchedule(schedule: Schedule) = scheduleDao.delete(schedule)
     suspend fun deleteSchedulesByCourseId(courseId: Long) = scheduleDao.deleteByCourseId(courseId)
 
-    suspend fun insertRoom(room: Room): Long =
-        roomDao.getByName(room.name)?.id ?: roomDao.insert(room)
+    /** 同名教室复用；并发/重复插入由唯一索引兜底（IGNORE 后回查） */
+    suspend fun insertRoom(room: Room): Long {
+        roomDao.getByName(room.name)?.let { return it.id }
+        val id = roomDao.insert(room)
+        return if (id != -1L) id else roomDao.getByName(room.name)?.id ?: -1L
+    }
     fun getAllRooms(): Flow<List<Room>> = roomDao.getAll()
+    suspend fun getAllRoomsOnce(): List<Room> = roomDao.getAllOnce()
     suspend fun getRoomById(id: Long): Room? = roomDao.getById(id)
 
     /** 改名教室；若新名字已被其他教室占用则直接复用该教室 id，避免 UNIQUE 冲突 */
@@ -88,7 +93,7 @@ class CourseRepository @Inject constructor(
     suspend fun deleteExam(exam: Exam) = examDao.delete(exam)
     suspend fun deleteExpiredExams() = examDao.deleteExpired(System.currentTimeMillis())
 
-    /** 删除单个排课时段；若该课程已无其他时段则连同课程一并删除 */
+    /** 删除单个排课时段；若该课程已无其他时段则连同课程一并删除，并回收空教室 */
     @Transaction
     suspend fun deleteScheduleWithCourseIfOrphan(scheduleId: Long) {
         val schedule = scheduleDao.getById(scheduleId) ?: return
@@ -96,7 +101,11 @@ class CourseRepository @Inject constructor(
         if (scheduleDao.getByCourse(schedule.courseId).isEmpty()) {
             courseDao.getById(schedule.courseId)?.let { courseDao.delete(it) }
         }
+        roomDao.deleteUnused()
     }
+
+    /** 回收不再被任何时段引用的教室（编辑清空教室后调用） */
+    suspend fun deleteUnusedRooms() = roomDao.deleteUnused()
 
     @Transaction
     suspend fun insertCourseWithSchedule(
@@ -117,7 +126,7 @@ class CourseRepository @Inject constructor(
         roomDao.deleteAll()
     }
 
-    /** 批量导入：一个课程（含多个排课时段）在一个事务内插入；每个时段独立解析教室并复用同名教室 */
+    /** 批量导入（幂等）：学期内同名课程复用，已存在的同课程同时段跳过；每时段独立解析并复用同名教室 */
     @Transaction
     suspend fun importCourseWithSchedules(
         semesterId: Long,
@@ -125,10 +134,15 @@ class CourseRepository @Inject constructor(
         teacher: String,
         schedules: List<Pair<Schedule, String?>>
     ): Long {
-        val courseId = courseDao.insert(
-            Course(semesterId = semesterId, name = name, teacher = teacher, color = "0")
-        )
+        val courseId = courseDao.getByNameInSemester(semesterId, name)?.id
+            ?: courseDao.insert(Course(semesterId = semesterId, name = name, teacher = teacher, color = "0"))
         for ((sched, roomName) in schedules) {
+            val duplicate = scheduleDao.findDuplicate(
+                courseId = courseId, dayOfWeek = sched.dayOfWeek,
+                startPeriod = sched.startPeriod, endPeriod = sched.endPeriod,
+                startWeek = sched.startWeek, endWeek = sched.endWeek, weekType = sched.weekType
+            )
+            if (duplicate != null) continue
             val roomId = roomName?.takeIf { it.isNotBlank() }?.let { insertRoom(Room(name = it)) }
             scheduleDao.insert(sched.copy(courseId = courseId, roomId = roomId))
         }

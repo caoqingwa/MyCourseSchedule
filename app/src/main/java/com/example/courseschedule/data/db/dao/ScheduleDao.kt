@@ -15,6 +15,17 @@ interface ScheduleDao {
     @Query("SELECT * FROM schedules WHERE id = :id")
     suspend fun getById(id: Long): Schedule?
 
+    /** 查重：同一课程同一天/节次/周次/周型的时段是否已存在（导入幂等） */
+    @Query(
+        """SELECT * FROM schedules WHERE courseId = :courseId AND dayOfWeek = :dayOfWeek
+           AND startPeriod = :startPeriod AND endPeriod = :endPeriod
+           AND startWeek = :startWeek AND endWeek = :endWeek AND weekType = :weekType LIMIT 1"""
+    )
+    suspend fun findDuplicate(
+        courseId: Long, dayOfWeek: Int, startPeriod: Int, endPeriod: Int,
+        startWeek: Int, endWeek: Int, weekType: Int
+    ): Schedule?
+
     @Insert
     suspend fun insert(schedule: Schedule): Long
 

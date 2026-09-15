@@ -121,14 +121,14 @@ fun TodayScreen(
                                 "\u4e0b\u4e00\u8282\uff1a" + it.course.name + " " + it.schedule.startPeriod + "-" + it.schedule.endPeriod + "\u8282"
                             }
                         }
-                        CourseCard(cws, isCurrent = true, nextInfo = nxt, onClick = { onCourseClick(cws.course.id) })
+                        CourseCard(cws, isCurrent = true, nextInfo = nxt, semester = state.semester, onClick = { onCourseClick(cws.course.id) })
                     }
                 }
                 itemsIndexed(
                     items = state.upcomingCourses,
                     key = { _, item -> item.schedule.id }
                 ) { idx, item ->
-                    CourseCard(item, isCurrent = false, nextInfo = nextInfoList[idx], onClick = { onCourseClick(item.course.id) })
+                    CourseCard(item, isCurrent = false, nextInfo = nextInfoList[idx], semester = state.semester, onClick = { onCourseClick(item.course.id) })
                 }
             }
         }

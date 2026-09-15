@@ -78,23 +78,11 @@ object DateUtils {
         }
     }
 
+    // 节次时间统一来自 semester（DB 中 periodTimesJson）；无学期时才回退内置默认值
     fun getPeriodTimeRange(startPeriod: Int, endPeriod: Int, semester: Semester?): String {
-        if (semester == null) return getPeriodTimeRangeStatic(startPeriod, endPeriod)
-        val times = semester.getPeriodTimes()
+        val times = semester?.getPeriodTimes() ?: Semester.defaultPeriodTimes()
         val start = times.getOrNull(startPeriod - 1)?.start ?: "??:??"
         val end = times.getOrNull(endPeriod - 1)?.end ?: "??:??"
-        return "$start-$end"
-    }
-
-    fun getPeriodTimeRangeStatic(startPeriod: Int, endPeriod: Int): String {
-        val times = listOf(
-            "08:00" to "08:45", "08:55" to "09:40", "10:00" to "10:45",
-            "10:55" to "11:40", "14:00" to "14:45", "14:55" to "15:40",
-            "16:00" to "16:45", "16:55" to "17:40", "19:00" to "19:45",
-            "19:55" to "20:40", "20:50" to "21:35", "21:45" to "22:30"
-        )
-        val start = times.getOrNull(startPeriod - 1)?.first ?: "??:??"
-        val end = times.getOrNull(endPeriod - 1)?.second ?: "??:??"
         return "$start-$end"
     }
 

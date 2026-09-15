@@ -35,6 +35,7 @@ import com.example.courseschedule.data.db.entity.Exam
 import com.example.courseschedule.ui.component.AddExamDialog
 import com.example.courseschedule.ui.component.CalendarPicker
 import com.example.courseschedule.util.DateUtils
+import com.example.courseschedule.util.NotificationHelper
 import com.example.courseschedule.worker.ExamReminderWorker
 import java.text.SimpleDateFormat
 import java.util.*
@@ -64,6 +65,8 @@ fun CalendarScreen(
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
+    // 考试列表按课程 id 取名称：建一次 map，避免每个 item 里 O(课程数) 的 find
+    val courseMap = remember(state.courses) { state.courses.associateBy { it.id } }
 
     // Notification permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -71,6 +74,16 @@ fun CalendarScreen(
     ) { granted ->
         if (granted) {
             viewModel.setNotificationsEnabled(true)
+        }
+    }
+
+    // 提醒开关为开但缺少通知权限（Android 13+）时主动申请，否则 worker 会静默丢弃提醒
+    LaunchedEffect(state.notificationsEnabled) {
+        if (state.notificationsEnabled &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !NotificationHelper.hasNotificationPermission(context)
+        ) {
+            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -317,7 +330,7 @@ fun CalendarScreen(
                         } else {
                             " \u8fd8\u6709 " + hoursLeftVal + "\u5c0f\u65f6 "
                         }
-                        val courseName = state.courses.find { it.id == exam.courseId }?.name
+                        val courseName = courseMap[exam.courseId]?.name
                         val dateFmt = remember { SimpleDateFormat("M\u6708d\u65e5", Locale.getDefault()) }
                         val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
                         val dayOfWeekNames = remember { listOf("\u5468\u65e5", "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d") }

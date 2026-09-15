@@ -38,15 +38,13 @@ fun buildCourseColorMap(courseNames: Collection<String>): Map<String, Pair<Color
 }
 
 /**
- * 根据单个课程名直接生成颜色，无需构建 Map。
- * 用于 CourseCard 等只需要单个颜色的场景。
+ * 根据单个课程名生成稳定的颜色（与颜色集合无关，同名同色、不同名大概率不同色）。
+ * 用名称哈希映射到色相环，避免 v2.13 前"每个名字都算作唯一项 → hue 恒为 0 → 所有卡片同色"的问题。
  */
 fun getCourseColorByName(courseName: String): Pair<Color, Color> {
-    val sortedNames = listOf(courseName).toSortedSet()
-    val idx = 0
-    val count = 1
-    val hueBase = (360f / count) * idx
-    val hue = if (hueBase in 45f..65f) hueBase + 30f else hueBase
+    val raw = courseName.hashCode().toLong() and 0xFFFFFFFFL
+    var hue = (raw % 360L).toFloat()
+    if (hue in 45f..65f) hue = (hue + 40f) % 360f
     return hslToColor(hue, 0.45f, 0.72f) to Color(0xFFFFFFFF)
 }
 

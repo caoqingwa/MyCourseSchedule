@@ -145,7 +145,7 @@ fun MainApp() {
                     scaleY = scale.value
                 },
             userScrollEnabled = !transitioning,
-            beyondViewportPageCount = 0
+            beyondViewportPageCount = 1
         ) { page ->
             when (page) {
                 0 -> TodayScreen(onCourseClick = { selectedCourseId = it })

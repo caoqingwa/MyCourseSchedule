@@ -38,7 +38,10 @@ class CourseScheduleApp : Application(), Configuration.Provider {
         createNotificationChannels()
         appScope.launch {
             repository.initDefaultSemester()
-            ExamReminderWorker.rescheduleAll(applicationContext, examDao)
+            // 仅在提醒开关开启时重排；否则用户关闭提醒后重启 App 会被重新排定
+            if (NotificationPrefs.isEnabled()) {
+                ExamReminderWorker.rescheduleAll(applicationContext, examDao)
+            }
         }
     }
 

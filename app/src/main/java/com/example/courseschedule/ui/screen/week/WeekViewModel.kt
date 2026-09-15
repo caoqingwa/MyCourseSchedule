@@ -223,6 +223,8 @@ class WeekViewModel @Inject constructor(
                     startWeek = startWeek, endWeek = endWeek, weekType = weekType,
                     roomId = roomId)
             )
+            // 教室被清空/改名后回收不再被引用的教室行
+            repository.deleteUnusedRooms()
         }
     }
 
@@ -247,17 +249,26 @@ class WeekViewModel @Inject constructor(
         var courseCount = 0
         var scheduleCount = 0
         for (course in courses) {
-            val schedPairs = course.schedules.map { s ->
-                Schedule(
-                    courseId = 0,
-                    dayOfWeek = s.dayOfWeek,
-                    startPeriod = s.startPeriod,
-                    endPeriod = s.endPeriod,
-                    startWeek = s.startWeek,
-                    endWeek = s.endWeek,
-                    weekType = s.weekType
-                ) to s.roomName
-            }
+            // 丢弃越界/颠倒的时段（day 1..7、节次 1..periodCount、周次 1..totalWeeks），避免脏数据入库
+            val schedPairs = course.schedules
+                .filter {
+                    it.dayOfWeek in 1..7 &&
+                        it.startPeriod in 1..semester.periodCount &&
+                        it.endPeriod in it.startPeriod..semester.periodCount &&
+                        it.startWeek in 1..semester.totalWeeks &&
+                        it.endWeek in it.startWeek..semester.totalWeeks
+                }
+                .map { s ->
+                    Schedule(
+                        courseId = 0,
+                        dayOfWeek = s.dayOfWeek,
+                        startPeriod = s.startPeriod,
+                        endPeriod = s.endPeriod,
+                        startWeek = s.startWeek,
+                        endWeek = s.endWeek,
+                        weekType = s.weekType
+                    ) to s.roomName
+                }
             if (schedPairs.isEmpty()) continue
             repository.importCourseWithSchedules(semester.id, course.name, course.teacher, schedPairs)
             courseCount++

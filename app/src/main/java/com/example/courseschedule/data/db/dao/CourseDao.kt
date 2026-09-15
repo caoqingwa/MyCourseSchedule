@@ -12,6 +12,10 @@ interface CourseDao {
     @Query("SELECT * FROM courses WHERE id = :id")
     suspend fun getById(id: Long): Course?
 
+    /** 学期内按名称查课程：导入去重用 */
+    @Query("SELECT * FROM courses WHERE semesterId = :semesterId AND name = :name LIMIT 1")
+    suspend fun getByNameInSemester(semesterId: Long, name: String): Course?
+
     @Insert
     suspend fun insert(course: Course): Long
 

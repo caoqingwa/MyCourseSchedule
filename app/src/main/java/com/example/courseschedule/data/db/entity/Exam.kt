@@ -15,7 +15,7 @@ import androidx.room.PrimaryKey
         childColumns = ["courseId"],
         onDelete = ForeignKey.CASCADE
     )],
-    indices = [Index("courseId")]
+    indices = [Index("courseId"), Index("examDate")]
 )
 data class Exam(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

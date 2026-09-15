@@ -36,8 +36,10 @@ class CourseDetailViewModel @Inject constructor(
         else flow {
             val course = repository.getCourseById(id) ?: return@flow
             val schedules = repository.getSchedulesByCourse(id)
+            // 一次取全量教室建 map，避免按时段逐条 getRoomById 的 N+1 查询
+            val roomNames = repository.getAllRoomsOnce().associate { it.id to it.name }
             val scheduleRooms = schedules.mapNotNull { s ->
-                s.roomId?.let { rid -> repository.getRoomById(rid)?.name?.let { s.id to it } }
+                s.roomId?.let { rid -> roomNames[rid]?.let { s.id to it } }
             }.toMap()
             val roomSummary = scheduleRooms.values.filter { it.isNotBlank() }.distinct().joinToString("\u3001")
             val semester = repository.getSemesterById(course.semesterId)

@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.example.courseschedule.data.db.dao.ExamDao
 import com.example.courseschedule.util.NotificationHelper
+import com.example.courseschedule.util.NotificationPrefs
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
@@ -33,6 +34,11 @@ class ExamReminderWorker @AssistedInject constructor(
                     if (exam.examDate < now) examDao.delete(exam)
                 }
             }
+            return Result.success()
+        }
+
+        if (!NotificationPrefs.isEnabled()) {
+            // 用户已关闭提醒：即便有历史排定任务也不推送
             return Result.success()
         }
 
@@ -75,8 +81,12 @@ class ExamReminderWorker @AssistedInject constructor(
         }
 
         suspend fun rescheduleAll(context: Context, examDao: ExamDao) {
-            val exams = examDao.getAllPending(System.currentTimeMillis())
+            val now = System.currentTimeMillis()
+            val exams = examDao.getAllPending(now)
             for (exam in exams) {
+                val triggerMillis = exam.examDate - exam.reminderHours.toLong() * 3_600_000L
+                // 提醒时间已过的不再入队：避免每次启动都以 delay=0 立即重复通知
+                if (triggerMillis <= now) continue
                 val courseName = exam.notes ?: "\u8003\u8bd5"
                 schedule(context, courseName, exam.examDate, exam.reminderHours, exam.id)
             }

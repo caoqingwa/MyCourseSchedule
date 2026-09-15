@@ -14,8 +14,8 @@ android {
         applicationId = "com.example.courseschedule"
         minSdk = 26
         targetSdk = 35
-        versionCode = 24
-        versionName = "2.13"
+        versionCode = 25
+        versionName = "2.14"
     }
 
     signingConfigs {
@@ -87,4 +87,6 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    testImplementation("junit:junit:4.13.2")
 }
