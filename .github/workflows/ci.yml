@@ -24,9 +24,16 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
-
       - uses: gradle/actions/setup-gradle@v4
+
+      # 不依赖 android-actions/setup-android（其在 cmdline-tools 16 上会因缺少旧 tools 包而失败）
+      - name: 接受 Android SDK 许可
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDK/cmdline-tools" -name sdkmanager -type f 2>/dev/null | sort | tail -n 1)"
+          if [ -n "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          fi
 
       # Android Studio 自动生成的本机 daemon JVM 锁定（Java 20/oracle），CI 上删除以使用 JAVA_HOME(JDK 17)
       - name: 清理本机 Gradle JDK 锁定

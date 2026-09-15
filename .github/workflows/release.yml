@@ -1,32 +1,50 @@
 name: 发版 Release
 
-# 推送形如 v2.12 的 tag 时，自动构建 APK 并发布 GitHub Release
+# 推送形如 v2.14 的 tag 时自动构建 APK 并发布 GitHub Release；
+# 也可在 Actions 页手动触发并填入已有 tag 重新发版（workflow_dispatch）
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布的已有 tag（如 v2.14）"
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+env:
+  REL_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REL_TAG }}
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      # 安装 Android SDK 命令行工具并接受全部许可证
-      # 缺失的 platforms/build-tools 会在构建时由 AGP 自动下载
-      - uses: android-actions/setup-android@v3
+      # 不依赖 android-actions/setup-android（其在 cmdline-tools 16 上会因缺少旧 tools 包而失败）：
+      # 用镜像自带 SDK，仅补一次许可证接受，缺失的 platforms/build-tools 由 AGP 自动下载
+      - name: 接受 Android SDK 许可
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDK/cmdline-tools" -name sdkmanager -type f 2>/dev/null | sort | tail -n 1)"
+          if [ -n "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          fi
 
       - name: 校验 tag 与 versionName 一致
         run: |
-          expected="${GITHUB_REF_NAME#v}"
+          expected="${REL_TAG#v}"
           actual="$(sed -n 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' app/build.gradle.kts)"
           if [ -z "$actual" ]; then
             echo "::error::未能从 app/build.gradle.kts 解析 versionName"
@@ -40,18 +58,18 @@ jobs:
 
       - name: 从 CHANGELOG.md 提取发布说明
         run: |
-          awk -v tag="$GITHUB_REF_NAME" '
+          awk -v tag="$REL_TAG" '
             $0 ~ "^## " tag "([ (]|$)" { found = 1; next }
             found && /^## / { exit }
             found
           ' CHANGELOG.md > notes-body.md
           if [ ! -s notes-body.md ]; then
-            echo "::error::CHANGELOG.md 中找不到 $GITHUB_REF_NAME 章节，请先补充更新日志"
+            echo "::error::CHANGELOG.md 中找不到 $REL_TAG 章节，请先补充更新日志"
             exit 1
           fi
           {
             printf '# CourseSchedule 更新日志\n\n'
-            printf '## %s (%s)\n\n' "$GITHUB_REF_NAME" "$(date +%F)"
+            printf '## %s (%s)\n\n' "$REL_TAG" "$(date +%F)"
             cat notes-body.md
           } > release-notes.md
 
@@ -79,10 +97,11 @@ jobs:
         run: ./gradlew :app:assembleRelease
 
       - name: 重命名 APK
-        run: mv app/build/outputs/apk/release/app-release.apk "${GITHUB_REF_NAME}.apk"
+        run: mv app/build/outputs/apk/release/app-release.apk "${REL_TAG}.apk"
 
       - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.REL_TAG }}
           body_path: release-notes.md
-          files: ${{ github.ref_name }}.apk
+          files: ${{ env.REL_TAG }}.apk
