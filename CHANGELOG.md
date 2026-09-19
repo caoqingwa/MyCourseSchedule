@@ -1,6 +1,6 @@
 # CourseSchedule 更新日志
 
-## v2.15 (2026-09-07)
+## v2.15 (2026-09-16)
 
 ### 性能与内存
 - 底部三页 Pager 与周课表周 Pager 的 `beyondViewportPageCount` 由 1 改为 0：只组合当前可见页，降低启动与切 Tab 时的组合/渲染开销
