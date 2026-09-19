@@ -14,8 +14,8 @@ android {
         applicationId = "com.example.courseschedule"
         minSdk = 26
         targetSdk = 35
-        versionCode = 25
-        versionName = "2.14"
+        versionCode = 26
+        versionName = "2.15"
     }
 
     signingConfigs {
@@ -87,6 +87,9 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // API 24–30 在首次启动后台安装 baseline profile（31+ 由系统安装时处理）
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 
     testImplementation("junit:junit:4.13.2")
 }

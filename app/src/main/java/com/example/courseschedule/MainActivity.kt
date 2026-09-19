@@ -2,6 +2,7 @@ package com.example.courseschedule
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.*
@@ -145,7 +146,7 @@ fun MainApp() {
                     scaleY = scale.value
                 },
             userScrollEnabled = !transitioning,
-            beyondViewportPageCount = 1
+            beyondViewportPageCount = 0
         ) { page ->
             when (page) {
                 0 -> TodayScreen(onCourseClick = { selectedCourseId = it })
@@ -221,6 +222,9 @@ fun MainApp() {
             }
         )
     }
+
+    // 设置页为覆盖式全屏，系统返回键应回到上一页而不是直接退出应用
+    BackHandler(enabled = showSettings) { showSettings = false }
 
     if (showSettings) {
         SettingsScreen(

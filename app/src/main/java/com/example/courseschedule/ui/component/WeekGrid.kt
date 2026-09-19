@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
@@ -120,8 +121,15 @@ fun WeekGrid(
     }
 
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val periodColWidthDp = 40.dp
-    val colWidthDp = (screenWidthDp - 40) / colCount
+    // 7 天视图横向空间紧张：收窄节次列、减小块间距与内边距，给课程名让出更多宽度；字号不变，靠增加行数显示更多
+    val compact = colCount >= 7
+    val periodColWidthDp = if (compact) 32.dp else 40.dp
+    val colWidthDp = (screenWidthDp - (if (compact) 32 else 40)) / colCount
+    val blockGap = if (compact) 2.dp else BlockGap
+    val blockTextPadding = if (compact) 1.dp else 2.dp
+    val blockNameFontSize = 10.sp
+    val blockLineHeight = 13.sp
+    val density = LocalDensity.current
 
     Column(modifier = modifier) {
         // Date row — show actual dates with light dividers
@@ -241,13 +249,13 @@ fun WeekGrid(
                 for (block in blocks) {
                     // 与前一块时间重叠时半宽并排，避免后画的块完全盖住先画的
                     val overlaps = block.startPeriod <= prevEnd
-                    val x = periodColWidthDp + colWidthDp.dp * col + BlockGap / 2 +
+                    val x = periodColWidthDp + colWidthDp.dp * col + blockGap / 2 +
                             if (overlaps) colWidthDp.dp * 0.5f else 0.dp
-                    val blockWidth = colWidthDp.dp - BlockGap -
+                    val blockWidth = colWidthDp.dp - blockGap -
                             if (overlaps) colWidthDp.dp * 0.5f else 0.dp
-                    val y = cellHeight * (block.startPeriod - 1) + BlockGap / 2
+                    val y = cellHeight * (block.startPeriod - 1) + blockGap / 2
                     val span = block.endPeriod - block.startPeriod + 1
-                    val blockHeight = cellHeight * span - BlockGap
+                    val blockHeight = cellHeight * span - blockGap
                     val (bg, fg) = courseColorMap[block.course.name] ?: FallbackColor
                     prevEnd = maxOf(prevEnd, block.endPeriod)
 
@@ -266,16 +274,21 @@ fun WeekGrid(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             val roomName = block.schedule.roomId?.let { roomMap[it] } ?: ""
                             val displayName = if (roomName.isNotBlank()) block.course.name + "@" + roomName else block.course.name
+                            // 按方块实际可用高度自适应行数，尽量把课程名完整显示（原来固定 3 行会过早省略）
+                            val labelHeight = if (span > 1) with(density) { 10.sp.toDp() } else 0.dp
+                            val maxLines = ((blockHeight - blockTextPadding * 2 - labelHeight) /
+                                    with(density) { blockLineHeight.toDp() })
+                                .toInt().coerceIn(1, 8)
                             Text(
                                 displayName,
-                                fontSize = 10.sp,
+                                fontSize = blockNameFontSize,
                                 fontWeight = FontWeight.SemiBold,
                                 color = fg,
-                                maxLines = 3,
+                                maxLines = maxLines,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = TextAlign.Center,
-                                lineHeight = 13.sp,
-                                modifier = Modifier.padding(2.dp)
+                                lineHeight = blockLineHeight,
+                                modifier = Modifier.padding(blockTextPadding)
                             )
                             if (span > 1) {
                                 Text(

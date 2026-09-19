@@ -11,7 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -255,6 +254,7 @@ private fun MonthGrid(
         result
     }
 
+    val cellHeight = 32.dp
     Column {
         var dayIdx = 0
         for (row in 0..5) {
@@ -262,43 +262,58 @@ private fun MonthGrid(
             Row {
                 for (col in 0..6) {
                     if (row == 0 && col < firstDayOfWeek || dayIdx >= daysInMonth) {
-                        Spacer(modifier = Modifier.weight(1f).height(32.dp))
+                        Spacer(modifier = Modifier.weight(1f).height(cellHeight))
                     } else {
                         val (d, isToday, inWeek) = dayData[dayIdx]
                         val cal2 = remember(year, month, d) { Calendar.getInstance().apply { set(year, month, d) } }
                         val dayMillis = cal2.timeInMillis
-                        val bg = when {
-                            isToday -> MaterialTheme.colorScheme.primary
-                            inWeek -> MaterialTheme.colorScheme.primaryContainer
-                            else -> MaterialTheme.colorScheme.surfaceContainer
-                        }
+                        // 当前周连续高亮：仅在这段的首/尾做外侧圆角，中间直角拼接成一条整体；
+                        // 跨月的半周只显示本月部分，可见端仍作圆角处理
+                        val prevInWeek = dayIdx > 0 && dayData[dayIdx - 1].third
+                        val nextInWeek = dayIdx < daysInMonth - 1 && dayData[dayIdx + 1].third
+                        val weekCorner = 8.dp
+                        val weekShape = RoundedCornerShape(
+                            topStart = if (inWeek && !prevInWeek) weekCorner else 0.dp,
+                            bottomStart = if (inWeek && !prevInWeek) weekCorner else 0.dp,
+                            topEnd = if (inWeek && !nextInWeek) weekCorner else 0.dp,
+                            bottomEnd = if (inWeek && !nextInWeek) weekCorner else 0.dp
+                        )
                         val fg = when {
                             isToday -> MaterialTheme.colorScheme.onPrimary
                             inWeek -> MaterialTheme.colorScheme.onPrimaryContainer
                             else -> MaterialTheme.colorScheme.onSurface
                         }
-
-                        if (onDayLongPress != null) {
-                            Box(
-                                modifier = Modifier.weight(1f).height(32.dp)
-                                    .clip(CircleShape)
-                                    .background(bg)
-                                    .combinedClickable(
-                                        onClick = { onDayClick(dayMillis) },
-                                        onLongClick = { onDayLongPress(dayMillis) }
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(d.toString(), fontSize = 12.sp, color = fg)
+                        val cellModifier = Modifier.weight(1f).height(cellHeight)
+                        Box(
+                            modifier = if (onDayLongPress != null) {
+                                cellModifier.combinedClickable(
+                                    onClick = { onDayClick(dayMillis) },
+                                    onLongClick = { onDayLongPress(dayMillis) }
+                                )
+                            } else {
+                                cellModifier.clickable { onDayClick(dayMillis) }
+                            },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            // 当前周背景条；今天也绘制，避免圆点在条上出现断口
+                            if (inWeek) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize()
+                                        .clip(weekShape)
+                                        .background(MaterialTheme.colorScheme.primaryContainer)
+                                )
                             }
-                        } else {
-                            Box(
-                                modifier = Modifier.weight(1f).height(32.dp)
-                                    .clip(CircleShape)
-                                    .background(bg)
-                                    .clickable { onDayClick(dayMillis) },
-                                contentAlignment = Alignment.Center
-                            ) {
+                            // 今天：实心圆角方块覆盖在周条之上；高度与周条等高，垂直齐平
+                            if (isToday) {
+                                Box(
+                                    modifier = Modifier.size(cellHeight)
+                                        .clip(RoundedCornerShape(weekCorner))
+                                        .background(MaterialTheme.colorScheme.primary),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(d.toString(), fontSize = 12.sp, color = fg)
+                                }
+                            } else {
                                 Text(d.toString(), fontSize = 12.sp, color = fg)
                             }
                         }

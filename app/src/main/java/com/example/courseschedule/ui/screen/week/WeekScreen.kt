@@ -262,12 +262,12 @@ fun WeekScreen(
                 )
 
                 Box(modifier = Modifier.weight(1f)) {
-                    // 各周页共享同一竖向滚动位置：横向换页不打断阅读进度
+                    // 各周页共享同一竖向滚动位置；仅当前页响应竖向手势，避免同一 ScrollState 挂多个滚动容器
                     val weekScroll = rememberScrollState()
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
-                        beyondViewportPageCount = 1
+                        beyondViewportPageCount = 0
                     ) { pageIndex ->
                         val week = pageIndex + 1
                         // 每页只渲染该周生效的时段（与 ViewModel.buildWeekPage 同一过滤规则）
@@ -280,7 +280,8 @@ fun WeekScreen(
                             active.mapNotNull { state.allCourseMap[it.courseId] }.associateBy { it.id }
                         }
                         Column(
-                            modifier = Modifier.fillMaxSize().verticalScroll(weekScroll)
+                            modifier = Modifier.fillMaxSize()
+                                .verticalScroll(weekScroll, enabled = pageIndex == pagerState.currentPage)
                         ) {
                             WeekGrid(
                                 schedules = active,

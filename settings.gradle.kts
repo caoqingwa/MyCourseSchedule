@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "CourseSchedule"
 include(":app")
+include(":baselineprofile")

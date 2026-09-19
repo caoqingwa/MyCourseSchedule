@@ -32,8 +32,6 @@ class WeekViewModel @Inject constructor(
 
     @Immutable
     data class WeekPageData(
-        val schedules: List<Schedule> = emptyList(),
-        val courseMap: Map<Long, Course> = emptyMap(),
         val roomMap: Map<Long, String> = emptyMap(),
         val weekRange: String = ""
     )
@@ -104,23 +102,17 @@ class WeekViewModel @Inject constructor(
         _selectedWeek.value = week.coerceIn(1, uiState.value.totalWeeks.coerceAtLeast(1))
     }
 
+    /** 只保留 UI 实际消费的字段（roomMap 直传 + weekRange）；各周时段过滤改由页面按 week 局部计算 */
     private fun buildWeekPage(
-        allSchedules: List<Schedule>,
-        coursesMap: Map<Long, Course>,
         roomMap: Map<Long, String>,
         semester: Semester,
         week: Int
     ): WeekPageData {
-        if (week < 1 || week > semester.totalWeeks) return WeekPageData()
-        val active = allSchedules.filter {
-            DateUtils.isScheduleActive(it.startWeek, it.endWeek, it.weekType, week)
-        }
-        val courses = mutableMapOf<Long, Course>()
-        active.forEach { s -> coursesMap[s.courseId]?.let { courses[s.courseId] = it } }
+        if (week < 1 || week > semester.totalWeeks) return WeekPageData(roomMap = roomMap)
         val range = DateUtils.getWeekRange(semester.startDate, week)
         val rangeStr = Instant.ofEpochMilli(range.first).atZone(Zone).format(FMT_FULL) + " ~ " +
             Instant.ofEpochMilli(range.second).atZone(Zone).format(FMT_SHORT)
-        return WeekPageData(schedules = active, courseMap = courses, roomMap = roomMap, weekRange = rangeStr)
+        return WeekPageData(roomMap = roomMap, weekRange = rangeStr)
     }
 
     companion object {
@@ -147,7 +139,7 @@ class WeekViewModel @Inject constructor(
                     val dow = DateUtils.getDayOfWeek(now)
                     val displayWeek = (if (selectedWeek > 0) selectedWeek else currentWeek)
                         .coerceIn(1, semester.totalWeeks)
-                    val currentPage = buildWeekPage(schedules, courseMap, roomMap, semester, displayWeek)
+                    val currentPage = buildWeekPage(roomMap, semester, displayWeek)
                     val maxPeriod = schedules.maxOfOrNull { it.endPeriod } ?: 0
                     val hasWeekend = schedules.any { it.dayOfWeek > 5 }
                     WeekUiState(

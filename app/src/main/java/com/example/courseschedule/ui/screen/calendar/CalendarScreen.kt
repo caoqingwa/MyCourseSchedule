@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,8 +52,9 @@ fun CalendarScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val cal = remember { Calendar.getInstance() }
-    var displayMonth by remember { mutableIntStateOf(cal.get(Calendar.MONTH)) }
-    var displayYear by remember { mutableIntStateOf(cal.get(Calendar.YEAR)) }
+    // rememberSaveable：Tab 被 Pager 销毁重建后仍保留当前浏览月份
+    var displayMonth by rememberSaveable { mutableIntStateOf(cal.get(Calendar.MONTH)) }
+    var displayYear by rememberSaveable { mutableIntStateOf(cal.get(Calendar.YEAR)) }
 
     var showAddExamDialog by remember { mutableStateOf(false) }
     var showEditExamDialog by remember { mutableStateOf(false) }
