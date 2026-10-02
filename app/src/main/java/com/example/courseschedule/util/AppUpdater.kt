@@ -44,23 +44,34 @@ object AppUpdater {
     fun canRequestInstalls(context: Context): Boolean =
         context.packageManager.canRequestPackageInstalls()
 
-    /** 跳转系统"允许安装未知应用"授权页 */
+    /** 跳转系统"允许安装未知应用"授权页；部分 ROM 无此页时退回到应用详情页，均失败则静默 */
     fun openInstallPermissionSettings(context: Context) {
-        val intent = Intent(
-            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-            Uri.parse("package:${context.packageName}")
-        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
+        val pkgUri = Uri.parse("package:${context.packageName}")
+        try {
+            context.startActivity(
+                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, pkgUri)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (_: Exception) {
+            try {
+                context.startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            } catch (_: Exception) {
+                // 无可用设置页，交给调用方提示
+            }
+        }
     }
 
-    /** 通过 FileProvider 唤起系统安装器，唤起失败返回 false */
+    /** 通过 FileProvider 唤起系统安装器，唤起失败返回 false（不抛异常） */
     fun launchInstaller(context: Context, file: File): Boolean {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, "application/vnd.android.package-archive")
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         return try {
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             context.startActivity(intent)
             true
         } catch (_: Exception) {

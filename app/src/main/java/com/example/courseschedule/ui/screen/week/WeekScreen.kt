@@ -228,8 +228,15 @@ fun WeekScreen(
         pagerReady = true
     }
 
-    // 手势/惯性翻页越过页中点后写回 VM；程序性滚动期间抑制，避免顶部周次被中间页刷掉
+    // 手势/惯性翻页越过页中点后写回 VM；程序性滚动期间抑制，避免顶部周次被中间页刷掉。
+    // 跳过首次组合的初始页回调：外层 Pager 只保留当前页后周页面每次进入都会重建，
+    // 首次回调用的是基于旧 selectedWeek 的初始页，会把日历跳转刚设好的目标周覆盖掉。
+    var pagerWriteBackReady by remember { mutableStateOf(false) }
     LaunchedEffect(pagerState.currentPage) {
+        if (!pagerWriteBackReady) {
+            pagerWriteBackReady = true
+            return@LaunchedEffect
+        }
         if (!suppressPagerSync && state.semester != null) {
             viewModel.selectWeek(pagerState.currentPage + 1)
         }

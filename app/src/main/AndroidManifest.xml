@@ -4,6 +4,8 @@
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 8+ 应用内安装 APK 必需：否则 canRequestPackageInstalls() 恒为 false，系统"安装未知应用"也无法为本站授权 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".CourseScheduleApp"
