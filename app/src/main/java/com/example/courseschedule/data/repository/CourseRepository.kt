@@ -97,7 +97,11 @@ class CourseRepository @Inject constructor(
     @Transaction
     suspend fun deleteScheduleWithCourseIfOrphan(scheduleId: Long) {
         val schedule = scheduleDao.getById(scheduleId) ?: return
-        scheduleDao.delete(schedule)
+        val group = scheduleDao.getByCourse(schedule.courseId).filter {
+            it.dayOfWeek == schedule.dayOfWeek && it.startPeriod == schedule.startPeriod &&
+                it.endPeriod == schedule.endPeriod && it.roomId == schedule.roomId
+        }
+        group.forEach { scheduleDao.delete(it) }
         if (scheduleDao.getByCourse(schedule.courseId).isEmpty()) {
             courseDao.getById(schedule.courseId)?.let { courseDao.delete(it) }
         }
@@ -108,13 +112,25 @@ class CourseRepository @Inject constructor(
     suspend fun deleteUnusedRooms() = roomDao.deleteUnused()
 
     @Transaction
-    suspend fun insertCourseWithSchedule(
+    suspend fun insertCourseWithSchedules(
         course: Course,
-        schedule: Schedule
+        schedules: List<Schedule>
     ): Long {
         val courseId = courseDao.insert(course)
-        scheduleDao.insert(schedule.copy(courseId = courseId))
+        for (schedule in schedules) {
+            scheduleDao.insert(schedule.copy(courseId = courseId))
+        }
         return courseId
+    }
+
+    @Transaction
+    suspend fun replaceSchedules(
+        courseId: Long,
+        oldSchedules: List<Schedule>,
+        newSchedules: List<Schedule>
+    ) {
+        oldSchedules.forEach { scheduleDao.delete(it) }
+        newSchedules.forEach { scheduleDao.insert(it.copy(courseId = courseId)) }
     }
 
     /** 清除所有课程相关数据（课程/课表/考试/教室），保留学期设置 */

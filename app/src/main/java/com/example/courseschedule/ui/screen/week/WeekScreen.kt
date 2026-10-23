@@ -34,6 +34,7 @@ import com.example.courseschedule.ui.component.SemesterSetupDialog
 import com.example.courseschedule.ui.component.WeekGrid
 import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.util.DateUtils
+import com.example.courseschedule.util.weeksForSpan
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -305,10 +306,11 @@ fun WeekScreen(
                                     longPressDay = day; longPressPeriod = period
                                     scope.launch {
                                         val conflicts = viewModel.checkConflict(
-                                            dayOfWeek = day, startPeriod = period, endPeriod = period,
+                                            dayOfWeek = day, startPeriod = period,
+                                            endPeriod = minOf(period + 1, state.semester?.periodCount ?: 12),
                                             weekType = 0, startWeek = 1, endWeek = state.totalWeeks
                                         )
-                                        addDialogConflicts = conflicts.map { it.courseName to it.dayOfWeek }
+                                        addDialogConflicts = conflicts.map { it.courseName to it.period }
                                     }
                                     showAddDialog = true
                                 },
@@ -331,8 +333,8 @@ fun WeekScreen(
             weekDays = state.semester?.weekDays ?: 5,
             conflicts = addDialogConflicts,
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, teacher, room, weekType, startWeek, endWeek, startPeriod, endPeriod ->
-                viewModel.addCourse(longPressDay, name, teacher, room, weekType, startWeek, endWeek, startPeriod, endPeriod)
+            onConfirm = { name, teacher, room, weeks, startPeriod, endPeriod ->
+                viewModel.addCourse(longPressDay, name, teacher, room, weeks, startPeriod, endPeriod)
                 showAddDialog = false
             }
         )
@@ -343,6 +345,17 @@ fun WeekScreen(
     if (showEditDialog && curEditCourse != null && curEditSchedule != null) {
         val course = curEditCourse
         val sched = curEditSchedule
+        val groupWeeks = state.allSchedules
+            .filter {
+                it.courseId == course.id && it.dayOfWeek == sched.dayOfWeek &&
+                    it.startPeriod == sched.startPeriod && it.endPeriod == sched.endPeriod &&
+                    it.roomId == sched.roomId
+            }
+            .flatMap { weeksForSpan(it.startWeek, it.endWeek, it.weekType) }
+            .toSet()
+        val initialWeeks = if (groupWeeks.isEmpty()) {
+            weeksForSpan(sched.startWeek, sched.endWeek, sched.weekType)
+        } else groupWeeks
         EditCourseDialog(
             courseName = course.name,
             courseTeacher = course.teacher,
@@ -356,12 +369,13 @@ fun WeekScreen(
             totalWeeks = state.totalWeeks,
             periodCount = state.semester?.periodCount ?: 12,
             weekDays = state.semester?.weekDays ?: 5,
+            initialWeeks = initialWeeks,
             onDismiss = { showEditDialog = false; editCourse = null; editSchedule = null },
-            onConfirm = { name, teacher, room, dayOfWeek, weekType, startWeek, endWeek, startPeriod, endPeriod ->
+            onConfirm = { name, teacher, room, dayOfWeek, weeks, startPeriod, endPeriod ->
                 viewModel.updateCourseAndSchedule(
                     courseId = course.id, scheduleId = sched.id,
-                    name = name, teacher = teacher, room = room, dayOfWeek = dayOfWeek, weekType = weekType,
-                    startWeek = startWeek, endWeek = endWeek, startPeriod = startPeriod, endPeriod = endPeriod
+                    name = name, teacher = teacher, room = room, dayOfWeek = dayOfWeek, weeks = weeks,
+                    startPeriod = startPeriod, endPeriod = endPeriod
                 )
                 showEditDialog = false; editCourse = null; editSchedule = null
             },

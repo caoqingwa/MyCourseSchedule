@@ -20,6 +20,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Schedule
+import com.example.courseschedule.util.weeksForSpan
 import com.example.courseschedule.BuildConfig
 import com.example.courseschedule.ui.navigation.Screen
 import com.example.courseschedule.ui.navigation.bottomNavItems
@@ -72,6 +73,7 @@ fun MainApp() {
 
     var editTarget by remember { mutableStateOf<Pair<Course, Schedule>?>(null) }
     var editRoom by remember { mutableStateOf("") }
+    var editWeeks by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var editTotalWeeks by remember { mutableIntStateOf(20) }
     var editPeriodCount by remember { mutableIntStateOf(12) }
     var editWeekDays by remember { mutableIntStateOf(5) }
@@ -178,6 +180,16 @@ fun MainApp() {
                 detailState.schedules.firstOrNull()?.let { sched ->
                     editTarget = course to sched
                     editRoom = detailState.scheduleRooms[sched.id] ?: ""
+                    val groupWeeks = detailState.schedules
+                        .filter {
+                            it.dayOfWeek == sched.dayOfWeek && it.startPeriod == sched.startPeriod &&
+                                it.endPeriod == sched.endPeriod && it.roomId == sched.roomId
+                        }
+                        .flatMap { weeksForSpan(it.startWeek, it.endWeek, it.weekType) }
+                        .toSet()
+                    editWeeks = if (groupWeeks.isEmpty()) {
+                        weeksForSpan(sched.startWeek, sched.endWeek, sched.weekType)
+                    } else groupWeeks
                     detailState.semester?.let {
                         editTotalWeeks = it.totalWeeks
                         editPeriodCount = it.periodCount
@@ -207,12 +219,13 @@ fun MainApp() {
             totalWeeks = editTotalWeeks,
             periodCount = editPeriodCount,
             weekDays = editWeekDays,
+            initialWeeks = editWeeks,
             onDismiss = { editTarget = null },
-            onConfirm = { name, teacher, room, dayOfWeek, weekType, startWeek, endWeek, startPeriod, endPeriod ->
+            onConfirm = { name, teacher, room, dayOfWeek, weeks, startPeriod, endPeriod ->
                 weekViewModel.updateCourseAndSchedule(
                     courseId = targetCourse.id, scheduleId = targetSchedule.id,
-                    name = name, teacher = teacher, room = room, dayOfWeek = dayOfWeek, weekType = weekType,
-                    startWeek = startWeek, endWeek = endWeek, startPeriod = startPeriod, endPeriod = endPeriod
+                    name = name, teacher = teacher, room = room, dayOfWeek = dayOfWeek, weeks = weeks,
+                    startPeriod = startPeriod, endPeriod = endPeriod
                 )
                 editTarget = null
             },

@@ -33,13 +33,20 @@ fun CourseDetailSheet(
             DetailRow(icon = "\ud83d\udc64", label = "\u6559\u5e08", value = course.teacher)
 
             val weekTypes = mapOf(0 to "\u5168\u5468", 1 to "\u5355\u5468", 2 to "\u53cc\u5468")
-            val weekInfo = schedules.firstOrNull()?.let {
-                "\u7b2c" + it.startWeek + "-" + it.endWeek + "\u5468" + (weekTypes[it.weekType] ?: "")
-            } ?: "\u5f85\u914d\u7f6e"
+            val weekInfo = schedules.map {
+                val range = if (it.startWeek == it.endWeek) {
+                    "\u7b2c" + it.startWeek + "\u5468"
+                } else {
+                    "\u7b2c" + it.startWeek + "-" + it.endWeek + "\u5468"
+                }
+                range + (weekTypes[it.weekType] ?: "")
+            }.distinct().joinToString("\u3001").ifEmpty { "\u5f85\u914d\u7f6e" }
             DetailRow(icon = "\ud83d\udcc5", label = "\u8bfe\u7a0b\u5468\u6570", value = weekInfo)
 
             val dayNames = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d", "\u5468\u65e5")
-            val scheduleInfo = schedules.joinToString(", ") {
+            val scheduleInfo = schedules.distinctBy {
+                listOf(it.dayOfWeek, it.startPeriod, it.endPeriod, scheduleRooms[it.id])
+            }.joinToString(", ") {
                 val room = scheduleRooms[it.id]
                 val day = dayNames.getOrElse(it.dayOfWeek - 1) { "?" }
                 day + " " + it.startPeriod + "-" + it.endPeriod + "\u8282" + (if (!room.isNullOrBlank()) " @" + room else "")

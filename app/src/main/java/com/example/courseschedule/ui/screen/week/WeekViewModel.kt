@@ -12,6 +12,7 @@ import com.example.courseschedule.data.importer.ImportedCourse
 import com.example.courseschedule.data.repository.CourseRepository
 import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.util.DateUtils
+import com.example.courseschedule.util.groupWeeksForSchedules
 import com.example.courseschedule.worker.ExamReminderWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -177,44 +178,58 @@ class WeekViewModel @Inject constructor(
 
     fun addCourse(
         dayOfWeek: Int, name: String, teacher: String, room: String,
-        weekType: Int, startWeek: Int, endWeek: Int, startPeriod: Int, endPeriod: Int
+        weeks: Set<Int>, startPeriod: Int, endPeriod: Int
     ) {
         viewModelScope.launch {
             val semester = repository.getCurrentSemester().first() ?: return@launch
+            val validWeeks = weeks.filter { it in 1..semester.totalWeeks }.toSet()
+            if (validWeeks.isEmpty()) return@launch
             val roomId = if (room.isNotBlank()) repository.insertRoom(Room(name = room)) else null
             val course = Course(
                 semesterId = semester.id, name = name, teacher = teacher,
                 color = "0"
             )
-            val schedule = Schedule(
-                courseId = 0, dayOfWeek = dayOfWeek, startPeriod = startPeriod,
-                endPeriod = endPeriod, startWeek = startWeek, endWeek = endWeek,
-                weekType = weekType, roomId = roomId
-            )
-            repository.insertCourseWithSchedule(course, schedule)
+            val schedules = groupWeeksForSchedules(validWeeks).map { span ->
+                Schedule(
+                    courseId = 0, dayOfWeek = dayOfWeek, startPeriod = startPeriod,
+                    endPeriod = endPeriod, startWeek = span.startWeek, endWeek = span.endWeek,
+                    weekType = span.weekType, roomId = roomId
+                )
+            }
+            repository.insertCourseWithSchedules(course, schedules)
         }
     }
 
     fun updateCourseAndSchedule(
         courseId: Long, scheduleId: Long,
         name: String, teacher: String, room: String,
-        dayOfWeek: Int, weekType: Int, startWeek: Int, endWeek: Int, startPeriod: Int, endPeriod: Int
+        dayOfWeek: Int, weeks: Set<Int>, startPeriod: Int, endPeriod: Int
     ) {
         viewModelScope.launch {
             val course = repository.getCourseById(courseId) ?: return@launch
-            val schedule = repository.getSchedulesByCourse(courseId).firstOrNull { it.id == scheduleId }
+            val schedules = repository.getSchedulesByCourse(courseId)
+            val target = schedules.firstOrNull { it.id == scheduleId } ?: return@launch
+            val validWeeks = weeks.filter { it > 0 }.toSet()
+            if (validWeeks.isEmpty()) return@launch
             val roomId = if (room.isNotBlank()) {
-                schedule?.roomId?.let { repository.updateRoom(it, room) }
+                target.roomId?.let { repository.updateRoom(it, room) }
                     ?: repository.insertRoom(Room(name = room))
             } else null
             repository.updateCourse(course.copy(name = name, teacher = teacher))
 
-            repository.updateSchedule(
-                Schedule(id = scheduleId, courseId = courseId, dayOfWeek = dayOfWeek,
+            val group = schedules.filter {
+                it.dayOfWeek == target.dayOfWeek && it.startPeriod == target.startPeriod &&
+                    it.endPeriod == target.endPeriod && it.roomId == target.roomId
+            }
+            val newSchedules = groupWeeksForSchedules(validWeeks).map { span ->
+                Schedule(
+                    courseId = courseId, dayOfWeek = dayOfWeek,
                     startPeriod = startPeriod, endPeriod = endPeriod,
-                    startWeek = startWeek, endWeek = endWeek, weekType = weekType,
-                    roomId = roomId)
-            )
+                    startWeek = span.startWeek, endWeek = span.endWeek,
+                    weekType = span.weekType, roomId = roomId
+                )
+            }
+            repository.replaceSchedules(courseId, group, newSchedules)
             // 教室被清空/改名后回收不再被引用的教室行
             repository.deleteUnusedRooms()
         }
