@@ -13,6 +13,7 @@ import com.example.courseschedule.data.repository.CourseRepository
 import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.util.DateUtils
 import com.example.courseschedule.util.groupWeeksForSchedules
+import com.example.courseschedule.util.selectedWeeksOverlap
 import com.example.courseschedule.worker.ExamReminderWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -314,28 +315,29 @@ class WeekViewModel @Inject constructor(
             }
         }
         return conflicts
+            .distinctBy { it.importedCourseName to (it.dayOfWeek to it.startPeriod) }
+            .sortedWith(compareBy<ImportConflict> { it.dayOfWeek }.thenBy { it.startPeriod })
     }
 
     suspend fun checkConflict(
         dayOfWeek: Int, startPeriod: Int, endPeriod: Int,
-        weekType: Int, startWeek: Int, endWeek: Int,
-        excludeScheduleId: Long = 0
+        weeks: Set<Int>, excludeScheduleIds: Set<Long> = emptySet()
     ): List<ConflictInfo> {
-        val state = uiState.value
-        val schedules = state.allSchedules
-        val courseMap = state.allCourseMap
+        val semester = repository.getCurrentSemester().first() ?: return emptyList()
+        val schedules = repository.getSchedulesBySemester(semester.id).first()
+        val courseMap = repository.getCoursesBySemester(semester.id).first().associateBy { it.id }
         val conflicts = mutableListOf<ConflictInfo>()
+        val seen = mutableSetOf<Pair<String, Int>>()
         for (existing in schedules) {
-            if (existing.id == excludeScheduleId) continue
+            if (existing.id in excludeScheduleIds) continue
             if (existing.dayOfWeek != dayOfWeek) continue
             val periodOverlap = startPeriod <= existing.endPeriod && endPeriod >= existing.startPeriod
             if (!periodOverlap) continue
-            val weekOverlap = startWeek <= existing.endWeek && endWeek >= existing.startWeek
-            if (!weekOverlap) continue
-            val typeConflict = weekType == 0 || existing.weekType == 0 || weekType == existing.weekType
-            if (!typeConflict) continue
+            if (!selectedWeeksOverlap(weeks, existing.startWeek, existing.endWeek, existing.weekType)) continue
             val name = courseMap[existing.courseId]?.name ?: "\u8bfe\u7a0b"
-            conflicts.add(ConflictInfo(name, dayOfWeek, existing.startPeriod))
+            if (seen.add(name to existing.startPeriod)) {
+                conflicts.add(ConflictInfo(name, dayOfWeek, existing.startPeriod))
+            }
         }
         return conflicts
     }

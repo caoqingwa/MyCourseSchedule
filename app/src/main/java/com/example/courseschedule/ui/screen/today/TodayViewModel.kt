@@ -32,6 +32,8 @@ class TodayViewModel @Inject constructor(
     @Immutable
     data class TodayUiState(
         val semester: Semester? = null,
+        // 由 ticker 驱动重算，跨零点后会跟着变，不会像以前那样把昨天的日期一直显示着
+        val todayLabel: String = "",
         val upcomingCourses: List<CourseWithSchedule> = emptyList(),
         val currentCourse: CourseWithSchedule? = null,
         val currentPeriod: Int = 0,
@@ -117,7 +119,9 @@ class TodayViewModel @Inject constructor(
             val hasWeekend = schedules.any { it.dayOfWeek > 5 }
 
             TodayUiState(
-                semester = semester, upcomingCourses = upcoming, currentCourse = current,
+                semester = semester,
+                todayLabel = nowDateLabel(now),
+                upcomingCourses = upcoming, currentCourse = current,
                 currentPeriod = currentPeriod,
                 totalRemaining = if (current != null) upcoming.size + 1 else upcoming.size,
                 isEmpty = activeSchedules.isEmpty(),
@@ -135,6 +139,9 @@ class TodayViewModel @Inject constructor(
             repository.saveSemesterCurrent(name, startDateMillis, totalWeeks, periodCount, weekDays, periodTimesJson)
         }
     }
+
+    private fun nowDateLabel(millis: Long): String =
+        java.text.SimpleDateFormat("yyyy\u5e74M\u6708d\u65e5 \u00b7 EEEE", Locale.CHINESE).format(Date(millis))
 
     fun deletePreset(semester: Semester) {
         viewModelScope.launch {

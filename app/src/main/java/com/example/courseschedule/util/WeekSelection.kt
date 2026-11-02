@@ -23,6 +23,10 @@ fun weeksForSpan(startWeek: Int, endWeek: Int, weekType: Int): Set<Int> {
 fun toggleWeekPattern(current: Set<Int>, pattern: Set<Int>): Set<Int> =
     if (current.containsAll(pattern)) current - pattern else current + pattern
 
+/** True when any selected week is covered by the stored schedule span. */
+fun selectedWeeksOverlap(weeks: Set<Int>, startWeek: Int, endWeek: Int, weekType: Int): Boolean =
+    weeks.any { DateUtils.isScheduleActive(startWeek, endWeek, weekType, it) }
+
 /**
  * Compresses arbitrary selected weeks into Schedule-compatible spans.
  * A full odd/even sequence becomes one span; other gaps become contiguous runs.

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,7 +47,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun CalendarScreen(
     onDayClick: (dayMillis: Long, weekNumber: Int) -> Unit,
-    onNavigateToToday: () -> Unit,
     onOpenSettings: () -> Unit = {},
     viewModel: CalendarViewModel = hiltViewModel()
 ) {
@@ -55,6 +55,15 @@ fun CalendarScreen(
     // rememberSaveable：Tab 被 Pager 销毁重建后仍保留当前浏览月份
     var displayMonth by rememberSaveable { mutableIntStateOf(cal.get(Calendar.MONTH)) }
     var displayYear by rememberSaveable { mutableIntStateOf(cal.get(Calendar.YEAR)) }
+
+    // 倒计时按分钟自己走，否则停在这一页时「还剩 X 小时」会一直停在打开时的数字
+    var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            nowMillis = System.currentTimeMillis()
+            kotlinx.coroutines.delay(30_000L)
+        }
+    }
 
     var showAddExamDialog by remember { mutableStateOf(false) }
     var showEditExamDialog by remember { mutableStateOf(false) }
@@ -133,7 +142,7 @@ fun CalendarScreen(
     if (showExamDetailSheet && examToShowDetail != null) {
         val exam = examToShowDetail!!
         val courseName = state.courses.find { it.id == exam.courseId }?.name
-        val hoursLeft = ((exam.examDate - System.currentTimeMillis()) / 3600_000L).toInt().coerceAtLeast(0)
+        val hoursLeft = ((exam.examDate - nowMillis) / 3600_000L).toInt().coerceAtLeast(0)
         val daysLeft = (hoursLeft / 24)
         val examCal = Calendar.getInstance().apply { timeInMillis = exam.examDate }
         val dayOfWeekNames = remember { listOf("\u5468\u65e5", "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d") }
@@ -210,9 +219,17 @@ fun CalendarScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
                 title = {
-                    Text("\u8bfe\u7a0b\u8868", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                    Text("\u65e5\u5386", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                 },
                 actions = {
+                    // 回到今天：翻到别的月份后不用一周周划回来
+                    IconButton(onClick = {
+                        val today = Calendar.getInstance()
+                        displayMonth = today.get(Calendar.MONTH)
+                        displayYear = today.get(Calendar.YEAR)
+                    }) {
+                        Icon(Icons.Default.Today, contentDescription = "\u56de\u5230\u4eca\u5929")
+                    }
                     // Notification toggle
                     IconButton(onClick = {
                         if (state.notificationsEnabled) {
@@ -320,7 +337,7 @@ fun CalendarScreen(
                     }
                 } else {
                     items(state.exams, key = { it.id }) { exam ->
-                        val hoursLeftVal = ((exam.examDate - state.todayMillis) / 3600_000L).toInt().coerceAtLeast(0)
+                        val hoursLeftVal = ((exam.examDate - nowMillis) / 3600_000L).toInt().coerceAtLeast(0)
                         val daysLeftVal = hoursLeftVal / 24
                         val badgeColor = when {
                             daysLeftVal <= 3 -> MaterialTheme.colorScheme.error

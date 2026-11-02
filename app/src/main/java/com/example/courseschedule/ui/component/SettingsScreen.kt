@@ -1,5 +1,6 @@
 package com.example.courseschedule.ui.component
 
+import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -8,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.TextFields
@@ -65,6 +67,9 @@ fun SettingsScreen(
     var checkState by remember { mutableStateOf<UpdateCheckState>(UpdateCheckState.Idle) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    // 外观：手动主题模式 + 是否跟随壁纸取色
+    val themeMode by SettingsPrefs.themeMode.collectAsStateWithLifecycle()
+    val dynamicColor by SettingsPrefs.dynamicColor.collectAsStateWithLifecycle()
 
     // 下载 {tag} 对应 APK：成功且已授权则直接唤起安装器，否则转入待授权
     val startDownload: (String) -> Unit = { tag ->
@@ -158,6 +163,48 @@ fun SettingsScreen(
                         Text("\u5c0f", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("\u6807\u51c6", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("\u5927", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+
+            // ── 外观 ──
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("\u5916\u89c2", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            SettingsPrefs.THEME_SYSTEM to "\u8ddf\u968f\u7cfb\u7edf",
+                            SettingsPrefs.THEME_LIGHT to "\u6d45\u8272",
+                            SettingsPrefs.THEME_DARK to "\u6df1\u8272"
+                        ).forEach { (mode, label) ->
+                            FilterChip(
+                                selected = themeMode == mode,
+                                onClick = { SettingsPrefs.setThemeMode(mode) },
+                                label = { Text(label, fontSize = 12.sp) }
+                            )
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("\u4f7f\u7528\u58c1\u7eb8\u53d6\u8272", fontSize = 14.sp)
+                            Text(
+                                "\u5f00\u542f\u540e\u4e3b\u8272\u8ddf\u968f\u58c1\u7eb8\uff08Android 12+ \u624d\u751f\u6548\uff09",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = dynamicColor,
+                            enabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S,
+                            onCheckedChange = { SettingsPrefs.setDynamicColor(it) }
+                        )
                     }
                 }
             }

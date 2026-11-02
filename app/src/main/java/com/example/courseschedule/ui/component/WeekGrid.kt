@@ -10,7 +10,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,8 +30,9 @@ import androidx.compose.ui.unit.sp
 import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Schedule
 import com.example.courseschedule.data.db.entity.Semester
-import com.example.courseschedule.ui.theme.buildCourseColorMap
+import com.example.courseschedule.ui.theme.getCourseColorByName
 import com.example.courseschedule.util.DateUtils
+import kotlinx.coroutines.delay
 
 private data class MergedBlock(val course: Course, val schedule: Schedule, val startPeriod: Int, val endPeriod: Int)
 private val FallbackColor = Color.Gray to Color.White
@@ -41,8 +46,8 @@ fun WeekGrid(
     courses: Map<Long, Course>,
     roomMap: Map<Long, String> = emptyMap(),
     semester: Semester?,
-    currentDayOfWeek: Int,
     highlightDayOfWeek: Int = 0,
+    showNowIndicator: Boolean = false,
     selectedWeek: Int = 1,
     onCellClick: (Course, Schedule) -> Unit,
     onCellLongClick: (dayOfWeek: Int, period: Int) -> Unit,
@@ -109,9 +114,10 @@ fun WeekGrid(
         }
         result.sortedBy { it.startPeriod } } }
 
-    // 为所有课程名生成唯一颜色映射
+    // 按课程名哈希取色：与课程数量/排序无关，增删课程不会让整张课表重新染色，
+    // 且与今日页卡片同色（两处共用 getCourseColorByName）
     val courseColorMap = remember(courses) {
-        buildCourseColorMap(courses.values.map { it.name })
+        courses.values.map { it.name }.distinct().associateWith { getCourseColorByName(it) }
     }
 
     val occupied = remember(schedules, courses, totalPeriods, colCount) {
@@ -131,6 +137,19 @@ fun WeekGrid(
     val blockLineHeight = 13.sp
     val density = LocalDensity.current
 
+    // 「现在」红线：每 30 秒重新定位一次；只在当前周显示
+    var nowMinuteOfDay by remember { mutableIntStateOf(currentMinuteOfDay()) }
+    LaunchedEffect(showNowIndicator) {
+        if (!showNowIndicator) return@LaunchedEffect
+        while (true) {
+            nowMinuteOfDay = currentMinuteOfDay()
+            delay(30_000)
+        }
+    }
+    val nowLineOffset = remember(nowMinuteOfDay, startTimes, endTimes, showNowIndicator) {
+        if (!showNowIndicator) null else nowLinePeriodOffset(nowMinuteOfDay, startTimes, endTimes)
+    }
+
     Column(modifier = modifier) {
         // Date row — show actual dates with light dividers
         if (weekDates.isNotEmpty()) {
@@ -145,8 +164,9 @@ fun WeekGrid(
                 }
                 for (i in weekDates.indices) {
                     val dayNum = i + 1
-                    val isToday = if (highlightDayOfWeek > 0) dayNum == highlightDayOfWeek
-                        else dayNum == currentDayOfWeek
+                    // 只有「当前周 + 今天」才高亮：别的周传 0，绝不能再回退到今天的星期几，
+                    // 否则翻到第 8 周时仍把「周四」标成今天（日期数字也跟着错）
+                    val isToday = highlightDayOfWeek > 0 && dayNum == highlightDayOfWeek
                     Box(
                         modifier = Modifier
                             .width(colWidthDp.dp).fillMaxHeight()
@@ -181,8 +201,7 @@ fun WeekGrid(
             }
             for (i in dayNames.indices) {
                 val dayNum = i + 1
-                val isHighlighted = if (highlightDayOfWeek > 0) dayNum == highlightDayOfWeek
-                    else dayNum == currentDayOfWeek
+                val isHighlighted = highlightDayOfWeek > 0 && dayNum == highlightDayOfWeek
                 Box(
                     modifier = Modifier.width(colWidthDp.dp).fillMaxHeight()
                         .border(0.8.dp, borderColor, cellShape)
@@ -302,6 +321,49 @@ fun WeekGrid(
                     }
                 }
             }
+
+            // 「现在」标记：细红线画在课程块之上，一眼定位当前时间（仅当前周显示）
+            if (nowLineOffset != null) {
+                Box(
+                    modifier = Modifier
+                        .offset(x = periodColWidthDp, y = cellHeight * nowLineOffset - 1.dp)
+                        .width(colWidthDp.dp * colCount)
+                        .height(2.dp)
+                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
+                )
+            }
         }
     }
+}
+
+/** 当前时间的「分钟数」表示（0..1439） */
+private fun currentMinuteOfDay(): Int {
+    val cal = java.util.Calendar.getInstance()
+    return cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+}
+
+private fun parseTimeToMinutes(raw: String?): Int? {
+    if (raw == null) return null
+    val parts = raw.split(":")
+    if (parts.size < 2) return null
+    val h = parts[0].toIntOrNull() ?: return null
+    val m = parts[1].toIntOrNull() ?: return null
+    return h * 60 + m
+}
+
+/** 返回「第几节 + 节内进度」形式的纵向位置；不在任何节次区间内（课间/放学后）返回 null */
+private fun nowLinePeriodOffset(
+    nowMinutes: Int,
+    startTimes: List<String>,
+    endTimes: List<String>
+): Float? {
+    for (i in startTimes.indices) {
+        val s = parseTimeToMinutes(startTimes.getOrNull(i)) ?: continue
+        val e = parseTimeToMinutes(endTimes.getOrNull(i)) ?: continue
+        if (nowMinutes in s until e) {
+            val span = (e - s).coerceAtLeast(1)
+            return i + (nowMinutes - s).toFloat() / span
+        }
+    }
+    return null
 }

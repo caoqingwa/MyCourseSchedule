@@ -1,11 +1,14 @@
 package com.example.courseschedule
 
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -26,6 +29,7 @@ import com.example.courseschedule.ui.navigation.Screen
 import com.example.courseschedule.ui.navigation.bottomNavItems
 import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.ui.component.BottomNavBar
+import com.example.courseschedule.ui.component.CourseImportFlow
 import com.example.courseschedule.ui.component.EditCourseDialog
 import com.example.courseschedule.ui.component.SemesterSetupDialog
 import com.example.courseschedule.ui.component.SettingsScreen
@@ -46,9 +50,24 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContent {
-            CourseScheduleTheme {
+            val themeMode by SettingsPrefs.themeMode.collectAsStateWithLifecycle()
+            val dynamicColor by SettingsPrefs.dynamicColor.collectAsStateWithLifecycle()
+            val darkTheme = when (themeMode) {
+                SettingsPrefs.THEME_LIGHT -> false
+                SettingsPrefs.THEME_DARK -> true
+                else -> isSystemInDarkTheme()
+            }
+            // 手动选深色而系统是浅色时，状态栏/导航栏也要跟着换，否则图标看不见
+            SideEffect {
+                enableEdgeToEdge(
+                    statusBarStyle = if (darkTheme) SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                    else SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+                    navigationBarStyle = if (darkTheme) SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                    else SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+                )
+            }
+            CourseScheduleTheme(darkTheme = darkTheme, dynamicColor = dynamicColor) {
                 MainApp()
             }
         }
@@ -62,18 +81,22 @@ fun MainApp() {
     val screens = bottomNavItems
 
     var selectedCourseId by remember { mutableStateOf<Long?>(null) }
+    var selectedScheduleId by remember { mutableStateOf<Long?>(null) }
     val detailViewModel: CourseDetailViewModel = hiltViewModel()
     val detailState by detailViewModel.uiState.collectAsStateWithLifecycle()
     val weekViewModel: WeekViewModel = hiltViewModel()
 
     var showSettings by remember { mutableStateOf(false) }
     var showSettingsSemesterDialog by remember { mutableStateOf(false) }
+    var pendingAddCourse by remember { mutableStateOf(false) }
+    var importRequest by remember { mutableIntStateOf(0) }
     val fontScale by SettingsPrefs.fontScale.collectAsStateWithLifecycle()
     val density = LocalDensity.current
 
     var editTarget by remember { mutableStateOf<Pair<Course, Schedule>?>(null) }
     var editRoom by remember { mutableStateOf("") }
     var editWeeks by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var editGroupIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var editTotalWeeks by remember { mutableIntStateOf(20) }
     var editPeriodCount by remember { mutableIntStateOf(12) }
     var editWeekDays by remember { mutableIntStateOf(5) }
@@ -151,15 +174,32 @@ fun MainApp() {
             beyondViewportPageCount = 0
         ) { page ->
             when (page) {
-                0 -> TodayScreen(onCourseClick = { selectedCourseId = it })
-                1 -> WeekScreen(onCourseClick = { selectedCourseId = it })
+                0 -> TodayScreen(
+                    onCourseClick = { courseId, scheduleId ->
+                        selectedCourseId = courseId
+                        selectedScheduleId = scheduleId
+                    },
+                    onOpenSettings = { showSettings = true },
+                    onAddCourse = {
+                        pendingAddCourse = true
+                        navigateTo(1)
+                    }
+                )
+                1 -> WeekScreen(
+                    onCourseClick = { courseId, scheduleId ->
+                        selectedCourseId = courseId
+                        selectedScheduleId = scheduleId
+                    },
+                    onOpenSettings = { showSettings = true },
+                    autoAddCourse = pendingAddCourse,
+                    onAutoAddConsumed = { pendingAddCourse = false }
+                )
                 2 -> CalendarScreen(
                     onDayClick = { dayMillis, weekNumber ->
                         NavigationState.targetWeek = weekNumber
                         NavigationState.targetDayOfWeek = DateUtils.getDayOfWeek(dayMillis)
                         navigateTo(1)
                     },
-                    onNavigateToToday = { navigateTo(0) },
                     onOpenSettings = { showSettings = true }
                 )
             }
@@ -174,22 +214,23 @@ fun MainApp() {
             roomSummary = detailState.roomSummary,
             onDismiss = {
                 selectedCourseId = null
+                selectedScheduleId = null
                 detailViewModel.clear()
             },
             onEdit = {
-                detailState.schedules.firstOrNull()?.let { sched ->
+                (detailState.schedules.firstOrNull { it.id == selectedScheduleId }
+                    ?: detailState.schedules.firstOrNull())?.let { sched ->
                     editTarget = course to sched
                     editRoom = detailState.scheduleRooms[sched.id] ?: ""
-                    val groupWeeks = detailState.schedules
-                        .filter {
-                            it.dayOfWeek == sched.dayOfWeek && it.startPeriod == sched.startPeriod &&
-                                it.endPeriod == sched.endPeriod && it.roomId == sched.roomId
-                        }
-                        .flatMap { weeksForSpan(it.startWeek, it.endWeek, it.weekType) }
-                        .toSet()
+                    val groupSchedules = detailState.schedules.filter {
+                        it.dayOfWeek == sched.dayOfWeek && it.startPeriod == sched.startPeriod &&
+                            it.endPeriod == sched.endPeriod && it.roomId == sched.roomId
+                    }
+                    val groupWeeks = groupSchedules.flatMap { weeksForSpan(it.startWeek, it.endWeek, it.weekType) }.toSet()
                     editWeeks = if (groupWeeks.isEmpty()) {
                         weeksForSpan(sched.startWeek, sched.endWeek, sched.weekType)
                     } else groupWeeks
+                    editGroupIds = groupSchedules.map { it.id }.toSet().ifEmpty { setOf(sched.id) }
                     detailState.semester?.let {
                         editTotalWeeks = it.totalWeeks
                         editPeriodCount = it.periodCount
@@ -197,6 +238,7 @@ fun MainApp() {
                     }
                 }
                 selectedCourseId = null
+                selectedScheduleId = null
                 detailViewModel.clear()
             }
         )
@@ -220,6 +262,13 @@ fun MainApp() {
             periodCount = editPeriodCount,
             weekDays = editWeekDays,
             initialWeeks = editWeeks,
+            checkConflicts = { weeks, startPeriod, endPeriod ->
+                weekViewModel.checkConflict(
+                    dayOfWeek = targetSchedule.dayOfWeek, startPeriod = startPeriod,
+                    endPeriod = endPeriod, weeks = weeks,
+                    excludeScheduleIds = editGroupIds.ifEmpty { setOf(targetSchedule.id) }
+                ).map { it.courseName to it.period }
+            },
             onDismiss = { editTarget = null },
             onConfirm = { name, teacher, room, dayOfWeek, weeks, startPeriod, endPeriod ->
                 weekViewModel.updateCourseAndSchedule(
@@ -266,8 +315,16 @@ fun MainApp() {
                 weekViewModel.saveSemester(preset.name, preset.startDate, preset.totalWeeks, preset.periodCount, preset.weekDays, preset.periodTimesJson)
             },
             onDeletePreset = { weekViewModel.deletePreset(it) },
-            onImportClick = null
+            onImportClick = { importRequest++ }
         )
     }
+
+    // xlsx 导入：以前藏在周课表齿轮里，现在全局设置的学期弹窗也能直接导入
+    CourseImportFlow(
+        requestKey = importRequest,
+        onRequestHandled = { importRequest = 0 },
+        checkConflicts = { weekViewModel.checkImportConflicts(it) },
+        importCourses = { weekViewModel.importParsedCourses(it) }
+    )
     }
 }

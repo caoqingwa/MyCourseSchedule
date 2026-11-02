@@ -2,6 +2,7 @@ package com.example.courseschedule.ui.component
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.example.courseschedule.util.DateUtils
 import com.example.courseschedule.util.toggleWeekPattern
 import com.example.courseschedule.util.weeksForSpan
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,11 +45,12 @@ fun AddCourseDialog(
     totalWeeks: Int,
     periodCount: Int = 12,
     weekDays: Int = 5,
-    conflicts: List<Pair<String, Int>> = emptyList(),
+    checkConflicts: suspend (dayOfWeek: Int, weeks: Set<Int>, startPeriod: Int, endPeriod: Int) -> List<Pair<String, Int>> = { _, _, _, _ -> emptyList() },
     onDismiss: () -> Unit,
-    onConfirm: (name: String, teacher: String, room: String, weeks: Set<Int>, startPeriod: Int, endPeriod: Int) -> Unit,
+    onConfirm: (name: String, teacher: String, room: String, dayOfWeek: Int, weeks: Set<Int>, startPeriod: Int, endPeriod: Int) -> Unit,
 ) {
     val dayNames = if (weekDays == 7) DateUtils.DAY_NAMES_7 else DateUtils.DAY_NAMES_5
+    var selectedDay by remember { mutableIntStateOf(dayOfWeek.coerceIn(1, dayNames.size)) }
     var name by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf(false) }
     var teacher by remember { mutableStateOf("") }
@@ -58,44 +61,32 @@ fun AddCourseDialog(
     var weeksError by remember { mutableStateOf(false) }
     var startPeriod by remember { mutableStateOf(period.toString()) }
     var endPeriod by remember { mutableStateOf(minOf(period + 1, periodCount).toString()) }
+    var conflicts by remember { mutableStateOf<List<Pair<String, Int>>>(emptyList()) }
+    var checkingConflicts by remember { mutableStateOf(false) }
     var showConflictWarning by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     val spVal = startPeriod.toIntOrNull()
     val epVal = endPeriod.toIntOrNull()
     val periodError = (spVal != null && (spVal < 1 || spVal > periodCount)) ||
             (epVal != null && (epVal < 1 || epVal > periodCount)) ||
             (spVal != null && epVal != null && spVal > epVal)
+    val displayStart = spVal ?: period
+    val displayEnd = epVal ?: period
+    val periodLabel = if (displayStart == displayEnd) "\u7b2c${displayStart}\u8282"
+    else "\u7b2c${displayStart}-${displayEnd}\u8282"
 
     if (showConflictWarning) {
-        AlertDialog(
-            onDismissRequest = { showConflictWarning = false },
-            title = { Text("\u65f6\u95f4\u51b2\u7a81\u63d0\u793a") },
-            text = {
-                Column {
-                    Text("\u4ee5\u4e0b\u8bfe\u7a0b\u4e0e\u65b0\u589e\u8bfe\u7a0b\u65f6\u95f4\u91cd\u53e0:")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    conflicts.forEach { (courseName, period) ->
-                        Text(
-                            "  \u2022 $courseName (\u7b2c${period}\u8282)",
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("\u662f\u5426\u7ee7\u7eed\u6dfb\u52a0?", fontSize = 13.sp)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showConflictWarning = false
-                    if (!periodError && selectedWeeks.isNotEmpty()) {
-                        onConfirm(name.trim(), teacher.trim(), room.trim(), selectedWeeks,
-                            startPeriod.toIntOrNull() ?: period, endPeriod.toIntOrNull() ?: period)
-                    }
-                }) { Text("\u7ee7\u7eed\u6dfb\u52a0") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showConflictWarning = false }) { Text("\u53d6\u6d88") }
+        ConflictWarningDialog(
+            conflicts = conflicts,
+            confirmLabel = "\u7ee7\u7eed\u6dfb\u52a0",
+            onDismiss = { showConflictWarning = false },
+            onConfirm = {
+                showConflictWarning = false
+                onConfirm(
+                    name.trim(), teacher.trim(), room.trim(), selectedDay, selectedWeeks,
+                    startPeriod.toIntOrNull() ?: period, endPeriod.toIntOrNull() ?: period
+                )
             }
         )
     }
@@ -103,13 +94,19 @@ fun AddCourseDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("\u6dfb\u52a0\u8bfe\u7a0b - ${dayNames.getOrElse(dayOfWeek - 1) { "?" }} \u7b2c${period}\u8282")
+            Text("\u6dfb\u52a0\u8bfe\u7a0b - ${dayNames.getOrElse(selectedDay - 1) { "?" }} $periodLabel")
         },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // 从右下角 FAB 进来时不知道放周几，这里可以直接改
+                DaySelectorRow(
+                    dayNames = dayNames,
+                    selectedDay = selectedDay,
+                    onSelect = { selectedDay = it }
+                )
                 OutlinedTextField(
                     value = name, onValueChange = { name = it; nameError = false },
                     label = { Text("\u8bfe\u7a0b\u540d\u79f0") },
@@ -162,21 +159,93 @@ fun AddCourseDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
+            TextButton(enabled = !checkingConflicts, onClick = {
                 if (name.isBlank()) {
                     nameError = true
                 } else if (selectedWeeks.isEmpty()) {
                     weeksError = true
-                } else if (!periodError) {
-                    if (conflicts.isEmpty()) {
-                        onConfirm(name.trim(), teacher.trim(), room.trim(), selectedWeeks,
-                            startPeriod.toIntOrNull() ?: period, endPeriod.toIntOrNull() ?: period)
-                    } else {
-                        showConflictWarning = true
+                } else if (!periodError && !checkingConflicts) {
+                    val trimmedName = name.trim()
+                    val trimmedTeacher = teacher.trim()
+                    val trimmedRoom = room.trim()
+                    val weeks = selectedWeeks
+                    val sp = startPeriod.toIntOrNull() ?: period
+                    val ep = endPeriod.toIntOrNull() ?: period
+                    checkingConflicts = true
+                    scope.launch {
+                        try {
+                            conflicts = checkConflicts(selectedDay, weeks, sp, ep)
+                            if (conflicts.isEmpty()) {
+                                onConfirm(trimmedName, trimmedTeacher, trimmedRoom, selectedDay, weeks, sp, ep)
+                            } else {
+                                showConflictWarning = true
+                            }
+                        } finally {
+                            checkingConflicts = false
+                        }
                     }
                 }
             }) { Text("\u786e\u5b9a") }
         },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("\u53d6\u6d88") } }
+    )
+}
+
+@Composable
+private fun DaySelectorRow(
+    dayNames: List<String>,
+    selectedDay: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "\u661f\u671f",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            dayNames.forEachIndexed { index, label ->
+                val day = index + 1
+                FilterChip(
+                    selected = selectedDay == day,
+                    onClick = { onSelect(day) },
+                    label = { Text(label, fontSize = 12.sp) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConflictWarningDialog(
+    conflicts: List<Pair<String, Int>>,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("\u65f6\u95f4\u51b2\u7a81\u63d0\u793a") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Text("\u4ee5\u4e0b\u8bfe\u7a0b\u4e0e\u5f53\u524d\u8bfe\u7a0b\u65f6\u95f4\u91cd\u53e0:")
+                Spacer(modifier = Modifier.height(8.dp))
+                conflicts.forEach { (courseName, period) ->
+                    Text(
+                        "  \u2022 $courseName (\u7b2c${period}\u8282)",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("\u662f\u5426\u7ee7\u7eed\u4fdd\u5b58?", fontSize = 13.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("\u53d6\u6d88") } }
     )
 }
@@ -420,6 +489,7 @@ fun EditCourseDialog(
     periodCount: Int = 12,
     weekDays: Int = 5,
     initialWeeks: Set<Int>? = null,
+    checkConflicts: suspend (weeks: Set<Int>, startPeriod: Int, endPeriod: Int) -> List<Pair<String, Int>> = { _, _, _ -> emptyList() },
     onDismiss: () -> Unit,
     onConfirm: (name: String, teacher: String, room: String, dayOfWeek: Int, weeks: Set<Int>, startPeriod: Int, endPeriod: Int) -> Unit,
     onDelete: () -> Unit
@@ -437,13 +507,21 @@ fun EditCourseDialog(
     var weeksError by remember { mutableStateOf(false) }
     var sPeriod by remember { mutableStateOf(startPeriod.toString()) }
     var ePeriod by remember { mutableStateOf(endPeriod.toString()) }
+    var conflicts by remember { mutableStateOf<List<Pair<String, Int>>>(emptyList()) }
+    var checkingConflicts by remember { mutableStateOf(false) }
+    var showConflictWarning by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     val spVal = sPeriod.toIntOrNull()
     val epVal = ePeriod.toIntOrNull()
     val periodError = (spVal != null && (spVal < 1 || spVal > periodCount)) ||
             (epVal != null && (epVal < 1 || epVal > periodCount)) ||
             (spVal != null && epVal != null && spVal > epVal)
+    val displayStart = spVal ?: startPeriod
+    val displayEnd = epVal ?: endPeriod
+    val periodLabel = if (displayStart == displayEnd) "\u7b2c${displayStart}\u8282"
+    else "\u7b2c${displayStart}-${displayEnd}\u8282"
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -459,10 +537,25 @@ fun EditCourseDialog(
         )
     }
 
+    if (showConflictWarning) {
+        ConflictWarningDialog(
+            conflicts = conflicts,
+            confirmLabel = "\u7ee7\u7eed\u4fdd\u5b58",
+            onDismiss = { showConflictWarning = false },
+            onConfirm = {
+                showConflictWarning = false
+                onConfirm(
+                    name.trim(), teacher.trim(), room.trim(), dayOfWeek, selectedWeeks,
+                    sPeriod.toIntOrNull() ?: startPeriod, ePeriod.toIntOrNull() ?: endPeriod
+                )
+            }
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("\u7f16\u8f91\u8bfe\u7a0b - ${dayNames.getOrElse(dayOfWeek - 1) { "?" }}")
+            Text("\u7f16\u8f91\u8bfe\u7a0b - ${dayNames.getOrElse(dayOfWeek - 1) { "?" }} $periodLabel")
         },
         text = {
             Column(
@@ -521,14 +614,31 @@ fun EditCourseDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
+            TextButton(enabled = !checkingConflicts, onClick = {
                 if (name.isBlank()) {
                     nameError = true
                 } else if (selectedWeeks.isEmpty()) {
                     weeksError = true
-                } else if (!periodError) {
-                    onConfirm(name.trim(), teacher.trim(), room.trim(), dayOfWeek, selectedWeeks,
-                        sPeriod.toIntOrNull() ?: startPeriod, ePeriod.toIntOrNull() ?: endPeriod)
+                } else if (!periodError && !checkingConflicts) {
+                    val trimmedName = name.trim()
+                    val trimmedTeacher = teacher.trim()
+                    val trimmedRoom = room.trim()
+                    val weeks = selectedWeeks
+                    val sp = sPeriod.toIntOrNull() ?: startPeriod
+                    val ep = ePeriod.toIntOrNull() ?: endPeriod
+                    checkingConflicts = true
+                    scope.launch {
+                        try {
+                            conflicts = checkConflicts(weeks, sp, ep)
+                            if (conflicts.isEmpty()) {
+                                onConfirm(trimmedName, trimmedTeacher, trimmedRoom, dayOfWeek, weeks, sp, ep)
+                            } else {
+                                showConflictWarning = true
+                            }
+                        } finally {
+                            checkingConflicts = false
+                        }
+                    }
                 }
             }) { Text("\u4fdd\u5b58") }
         },

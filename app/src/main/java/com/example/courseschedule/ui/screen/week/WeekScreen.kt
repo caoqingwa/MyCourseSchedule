@@ -1,14 +1,13 @@
 package com.example.courseschedule.ui.screen.week
 
 import android.annotation.SuppressLint
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.MyLocation
@@ -16,32 +15,30 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Schedule
-import com.example.courseschedule.data.importer.ImportedCourse
-import com.example.courseschedule.data.importer.XlsxCourseParser
-import com.example.courseschedule.ui.screen.week.WeekViewModel.ImportConflict
 import com.example.courseschedule.ui.component.AddCourseDialog
 import com.example.courseschedule.ui.component.CourseScheduleTopBar
 import com.example.courseschedule.ui.component.EditCourseDialog
-import com.example.courseschedule.ui.component.SemesterSetupDialog
 import com.example.courseschedule.ui.component.WeekGrid
 import com.example.courseschedule.ui.navigation.NavigationState
 import com.example.courseschedule.util.DateUtils
 import com.example.courseschedule.util.weeksForSpan
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 fun WeekScreen(
-    onCourseClick: (Long) -> Unit,
+    onCourseClick: (courseId: Long, scheduleId: Long) -> Unit,
+    onOpenSettings: () -> Unit = {},
+    autoAddCourse: Boolean = false,
+    onAutoAddConsumed: () -> Unit = {},
     viewModel: WeekViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -63,146 +60,36 @@ fun WeekScreen(
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
-    var showSemesterDialog by remember { mutableStateOf(false) }
     var longPressDay by remember { mutableIntStateOf(1) }
     var longPressPeriod by remember { mutableIntStateOf(1) }
     var editCourse by remember { mutableStateOf<Course?>(null) }
     var editSchedule by remember { mutableStateOf<Schedule?>(null) }
-    var addDialogConflicts by remember { mutableStateOf<List<Pair<String, Int>>>(emptyList()) }
 
-    // 导入课表状态
-    var importResult by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    var importError by remember { mutableStateOf<String?>(null) }
-    var showImportConfirm by remember { mutableStateOf(false) }
-    var parsedCourses by remember { mutableStateOf<List<ImportedCourse>>(emptyList()) }
-    var importConflicts by remember { mutableStateOf<List<ImportConflict>>(emptyList()) }
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                try {
-                    val courses = context.contentResolver.openInputStream(uri)?.use { XlsxCourseParser.parse(it) }
-                        ?: emptyList()
-                    if (courses.isEmpty()) {
-                        importError = "\u672a\u89e3\u6790\u51fa\u6709\u6548\u8bfe\u7a0b\uff08\u8bf7\u786e\u8ba4\u8868\u683c\u5305\u542b\u201c\u8bfe\u7a0b\u540d\u79f0\u201d\u4e0e\u201c\u4e0a\u8bfe\u65f6\u95f4\u201d\u5217\uff09"
-                    } else {
-                        parsedCourses = courses
-                        importConflicts = viewModel.checkImportConflicts(courses)
-                        showImportConfirm = true
-                    }
-                } catch (e: Exception) {
-                    importError = "\u5bfc\u5165\u5931\u8d25\uff1a${e.message}"
-                }
-            }
+    /** 打开「添加课程」：优先用传入的星期/节次，其次用今天/当前节次，保证 FAB 也有合理默认值 */
+    fun openAddDialogFor(day: Int = 0, period: Int = 0) {
+        val weekDays = state.semester?.weekDays ?: 5
+        val periodCount = state.semester?.periodCount ?: 12
+        val today = state.currentDayOfWeek
+        longPressDay = when {
+            day in 1..weekDays -> day
+            today in 1..weekDays -> today
+            else -> 1
         }
+        val nowPeriod = DateUtils.getCurrentPeriod(state.semester)
+        longPressPeriod = when {
+            period in 1..periodCount -> period
+            nowPeriod in 1..periodCount -> nowPeriod
+            else -> 1
+        }
+        showAddDialog = true
     }
 
-    // 导入结果确认
-    if (showImportConfirm && parsedCourses.isNotEmpty()) {
-        val conflictCount = importConflicts.size
-        AlertDialog(
-            onDismissRequest = { showImportConfirm = false },
-            title = { Text("\u5bfc\u5165\u8bfe\u7a0b\u786e\u8ba4") },
-            text = {
-                Column {
-                    Text(
-                        "\u53d1\u73b0 ${parsedCourses.size} \u95e8\u8bfe\u7a0b\uff0c\u5c06\u5bfc\u5165\u5f53\u524d\u5b66\u671f\uff1a",
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    parsedCourses.take(8).forEach {
-                        Text("\u2022 ${it.name}", fontSize = 13.sp, maxLines = 1)
-                    }
-                    if (parsedCourses.size > 8) {
-                        Text("...\u7b49${parsedCourses.size}\u95e8", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (conflictCount > 0) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "\u26a0 \u4e0e\u5df2\u6709\u8bfe\u7a0b\u65f6\u95f4\u51b2\u7a81\u7684\u65f6\u6bb5 ${conflictCount} \u4e2a\uff1a",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        val dayNames = listOf("\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db", "\u5468\u4e94", "\u5468\u516d", "\u5468\u65e5")
-                        importConflicts.take(6).forEach {
-                            Text(
-                                "\u2022 ${it.importedCourseName} \u4e0e ${it.existingName} \uff08${dayNames.getOrElse(it.dayOfWeek - 1) { "?" }}\u7b2c${it.startPeriod}-${it.endPeriod}\u8282\uff09",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.error,
-                                maxLines = 1
-                            )
-                        }
-                        if (conflictCount > 6) {
-                            Text("...\u7b49${conflictCount}\u4e2a\u51b2\u7a81", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showImportConfirm = false
-                    val toImport = parsedCourses
-                    parsedCourses = emptyList()
-                    importConflicts = emptyList()
-                    scope.launch {
-                        try {
-                            val (courses, schedules) = viewModel.importParsedCourses(toImport)
-                            importResult = courses to schedules
-                        } catch (e: Exception) {
-                            importError = "\u5bfc\u5165\u5931\u8d25\uff1a${e.message}"
-                        }
-                    }
-                }) { Text("\u5168\u90e8\u5bfc\u5165") }
-            },
-            dismissButton = {
-                Row {
-                    if (conflictCount > 0) {
-                        TextButton(onClick = {
-                            showImportConfirm = false
-                            val conflictNames = importConflicts.map { it.importedCourseName }.toSet()
-                            val toImport = parsedCourses.filter { it.name !in conflictNames }
-                            parsedCourses = emptyList()
-                            importConflicts = emptyList()
-                            scope.launch {
-                                try {
-                                    val (courses, schedules) = viewModel.importParsedCourses(toImport)
-                                    importResult = courses to schedules
-                                } catch (e: Exception) {
-                                    importError = "\u5bfc\u5165\u5931\u8d25\uff1a${e.message}"
-                                }
-                            }
-                        }) {
-                            Text("\u8df3\u8fc7\u51b2\u7a81\u5bfc\u5165", color = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                    TextButton(onClick = { showImportConfirm = false; parsedCourses = emptyList(); importConflicts = emptyList() }) { Text("\u53d6\u6d88") }
-                }
-            }
-        )
-    }
-    importResult?.let { (courses, schedules) ->
-        AlertDialog(
-            onDismissRequest = { importResult = null },
-            title = { Text("\u5bfc\u5165\u5b8c\u6210") },
-            text = { Text("\u6210\u529f\u5bfc\u5165 ${courses} \u95e8\u8bfe\u7a0b\u3001${schedules} \u4e2a\u6392\u8bfe\u65f6\u6bb5\u3002") },
-            confirmButton = {
-                TextButton(onClick = { importResult = null }) { Text("\u597d") }
-            }
-        )
-    }
-    importError?.let { msg ->
-        AlertDialog(
-            onDismissRequest = { importError = null },
-            title = { Text("\u5bfc\u5165\u5931\u8d25") },
-            text = { Text(msg) },
-            confirmButton = {
-                TextButton(onClick = { importError = null }) { Text("\u597d") }
-            }
-        )
+    // 今日页的「添加课程」按钮：跳到这里后直接弹窗
+    LaunchedEffect(autoAddCourse, state.semester) {
+        if (autoAddCourse && state.semester != null) {
+            onAutoAddConsumed()
+            openAddDialogFor()
+        }
     }
 
     // 每周一页的官方 Pager：拖动时相邻两周始终并排可见，彻底消除单页滑动方案的空背景黑屏
@@ -253,9 +140,20 @@ fun WeekScreen(
             CourseScheduleTopBar(
                 selectedWeek = state.selectedWeek,
                 currentWeek = state.currentWeek,
-                onSettingsClick = { showSemesterDialog = true },
+                onSettingsClick = onOpenSettings,
                 onBackToCurrentWeek = { switchToWeek(state.currentWeek) }
             )
+        },
+        floatingActionButton = {
+            if (state.semester != null) {
+                FloatingActionButton(
+                    onClick = { openAddDialogFor() },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "\u6dfb\u52a0\u8bfe\u7a0b")
+                }
+            }
         },
         content = { innerPadding ->
             Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
@@ -296,28 +194,31 @@ fun WeekScreen(
                                 courses = courses,
                                 roomMap = state.currentPage.roomMap,
                                 semester = state.semester,
-                                currentDayOfWeek = state.currentDayOfWeek,
-                                highlightDayOfWeek = if (state.highlightDayOfWeek > 0) state.highlightDayOfWeek
-                                    else if (week == state.currentWeek) state.currentDayOfWeek else 0,
+                                // 只有当前显示的周才可能高亮：别的周传 0，交由 WeekGrid 完全不画高亮
+                                highlightDayOfWeek = when {
+                                    pageIndex != pagerState.currentPage -> 0
+                                    state.highlightDayOfWeek > 0 -> state.highlightDayOfWeek
+                                    week == state.currentWeek -> state.currentDayOfWeek
+                                    else -> 0
+                                },
+                                showNowIndicator = week == state.currentWeek,
                                 selectedWeek = week,
                                 modifier = Modifier.fillMaxWidth(),
-                                onCellClick = { course, _ -> onCourseClick(course.id) },
-                                onCellLongClick = { day, period ->
-                                    longPressDay = day; longPressPeriod = period
-                                    scope.launch {
-                                        val conflicts = viewModel.checkConflict(
-                                            dayOfWeek = day, startPeriod = period,
-                                            endPeriod = minOf(period + 1, state.semester?.periodCount ?: 12),
-                                            weekType = 0, startWeek = 1, endWeek = state.totalWeeks
-                                        )
-                                        addDialogConflicts = conflicts.map { it.courseName to it.period }
-                                    }
-                                    showAddDialog = true
-                                },
+                                onCellClick = { course, schedule -> onCourseClick(course.id, schedule.id) },
+                                onCellLongClick = { day, period -> openAddDialogFor(day, period) },
                                 onCourseLongClick = { course, schedule ->
                                     editCourse = course; editSchedule = schedule; showEditDialog = true
                                 }
                             )
+                            if (active.isEmpty()) {
+                                Text(
+                                    "\u957f\u6309\u7a7a\u767d\u683c\u5b50\u6dfb\u52a0\u8bfe\u7a0b\uff0c\u4e5f\u53ef\u4ee5\u70b9\u53f3\u4e0b\u89d2\u7684 +",
+                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                    fontSize = 13.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -331,10 +232,15 @@ fun WeekScreen(
             currentWeek = state.selectedWeek, totalWeeks = state.totalWeeks,
             periodCount = state.semester?.periodCount ?: 12,
             weekDays = state.semester?.weekDays ?: 5,
-            conflicts = addDialogConflicts,
+            checkConflicts = { day, weeks, startPeriod, endPeriod ->
+                viewModel.checkConflict(
+                    dayOfWeek = day, startPeriod = startPeriod,
+                    endPeriod = endPeriod, weeks = weeks
+                ).map { it.courseName to it.period }
+            },
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, teacher, room, weeks, startPeriod, endPeriod ->
-                viewModel.addCourse(longPressDay, name, teacher, room, weeks, startPeriod, endPeriod)
+            onConfirm = { name, teacher, room, day, weeks, startPeriod, endPeriod ->
+                viewModel.addCourse(day, name, teacher, room, weeks, startPeriod, endPeriod)
                 showAddDialog = false
             }
         )
@@ -345,17 +251,16 @@ fun WeekScreen(
     if (showEditDialog && curEditCourse != null && curEditSchedule != null) {
         val course = curEditCourse
         val sched = curEditSchedule
-        val groupWeeks = state.allSchedules
-            .filter {
-                it.courseId == course.id && it.dayOfWeek == sched.dayOfWeek &&
-                    it.startPeriod == sched.startPeriod && it.endPeriod == sched.endPeriod &&
-                    it.roomId == sched.roomId
-            }
-            .flatMap { weeksForSpan(it.startWeek, it.endWeek, it.weekType) }
-            .toSet()
+        val groupSchedules = state.allSchedules.filter {
+            it.courseId == course.id && it.dayOfWeek == sched.dayOfWeek &&
+                it.startPeriod == sched.startPeriod && it.endPeriod == sched.endPeriod &&
+                it.roomId == sched.roomId
+        }
+        val groupWeeks = groupSchedules.flatMap { weeksForSpan(it.startWeek, it.endWeek, it.weekType) }.toSet()
         val initialWeeks = if (groupWeeks.isEmpty()) {
             weeksForSpan(sched.startWeek, sched.endWeek, sched.weekType)
         } else groupWeeks
+        val excludedIds = groupSchedules.map { it.id }.toSet().ifEmpty { setOf(sched.id) }
         EditCourseDialog(
             courseName = course.name,
             courseTeacher = course.teacher,
@@ -370,6 +275,12 @@ fun WeekScreen(
             periodCount = state.semester?.periodCount ?: 12,
             weekDays = state.semester?.weekDays ?: 5,
             initialWeeks = initialWeeks,
+            checkConflicts = { weeks, startPeriod, endPeriod ->
+                viewModel.checkConflict(
+                    dayOfWeek = sched.dayOfWeek, startPeriod = startPeriod,
+                    endPeriod = endPeriod, weeks = weeks, excludeScheduleIds = excludedIds
+                ).map { it.courseName to it.period }
+            },
             onDismiss = { showEditDialog = false; editCourse = null; editSchedule = null },
             onConfirm = { name, teacher, room, dayOfWeek, weeks, startPeriod, endPeriod ->
                 viewModel.updateCourseAndSchedule(
@@ -382,27 +293,6 @@ fun WeekScreen(
             onDelete = {
                 viewModel.deleteSchedule(sched.id)
                 showEditDialog = false; editCourse = null; editSchedule = null
-            }
-        )
-    }
-    if (showSemesterDialog) {
-        SemesterSetupDialog(
-            semester = state.semester,
-            savedPresets = state.presets.filter { it.id != state.semester?.id },
-            maxScheduledPeriod = state.maxScheduledPeriod,
-            hasWeekendCourses = state.hasWeekendCourses,
-            onDismiss = { showSemesterDialog = false },
-            onConfirm = { name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson ->
-                viewModel.saveSemester(name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson)
-                showSemesterDialog = false
-            },
-            onLoadPreset = { preset ->
-                viewModel.saveSemester(preset.name, preset.startDate, preset.totalWeeks, preset.periodCount, preset.weekDays, preset.periodTimesJson)
-            },
-            onDeletePreset = { viewModel.deletePreset(it) },
-            onImportClick = {
-                showSemesterDialog = false
-                importLauncher.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream", "*/*"))
             }
         )
     }

@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.CourseSchedule" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- 冷启动窗口背景用与 Compose Surface 一致的米绿，避免白闪 -->
+    <style name="Theme.CourseSchedule" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
 </resources>

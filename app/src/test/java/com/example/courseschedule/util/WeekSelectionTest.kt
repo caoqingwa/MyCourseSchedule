@@ -1,6 +1,7 @@
 package com.example.courseschedule.util
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -49,6 +50,14 @@ class WeekSelectionTest {
         assertEquals(odd, toggleWeekPattern(emptySet(), odd))
         assertTrue(toggleWeekPattern(odd, odd).isEmpty())
         assertEquals((2..10 step 2).toSet(), toggleWeekPattern(all, odd))
+    }
+
+    @Test
+    fun selectedWeeksOverlapUsesWeekType() {
+        assertTrue(selectedWeeksOverlap(setOf(3, 5), 1, 10, 1))
+        assertFalse(selectedWeeksOverlap(setOf(2, 4), 1, 10, 1))
+        assertTrue(selectedWeeksOverlap(setOf(10, 11), 1, 10, 0))
+        assertFalse(selectedWeeksOverlap(setOf(11, 12), 1, 10, 0))
     }
 
     @Test
