@@ -137,7 +137,7 @@ fun WeekGrid(
     val blockLineHeight = 13.sp
     val density = LocalDensity.current
 
-    // 「现在」红线：每 30 秒重新定位一次；只在当前周显示
+    // 「现在」标记：只点亮左侧节次列，不做满宽硬线；每 30 秒重算一次，仅当前周显示
     var nowMinuteOfDay by remember { mutableIntStateOf(currentMinuteOfDay()) }
     LaunchedEffect(showNowIndicator) {
         if (!showNowIndicator) return@LaunchedEffect
@@ -149,6 +149,8 @@ fun WeekGrid(
     val nowLineOffset = remember(nowMinuteOfDay, startTimes, endTimes, showNowIndicator) {
         if (!showNowIndicator) null else nowLinePeriodOffset(nowMinuteOfDay, startTimes, endTimes)
     }
+    // 当前所在节次（0 基下标）；课间、放学后或非当前周为 null
+    val nowPeriodIndex = nowLineOffset?.toInt()
 
     Column(modifier = modifier) {
         // Date row — show actual dates with light dividers
@@ -222,25 +224,75 @@ fun WeekGrid(
 
         // Grid body: Canvas for grid lines + period labels + touch overlay + course blocks
         Box(modifier = Modifier.fillMaxWidth().height(gridBodyHeight)) {
-            // Period labels (left column) — rendered first, under grid lines
+            // Period labels (left column) — 当前所在节次的节号与时间用主色点亮
             for (row in 0 until totalPeriods) {
                 val sTime = startTimes.getOrNull(row) ?: "??"
                 val eTime = endTimes.getOrNull(row) ?: "??"
+                val isNowPeriod = row == nowPeriodIndex
                 Box(
                     modifier = Modifier
                         .offset(x = 0.dp, y = cellHeight * row)
                         .size(periodColWidthDp, cellHeight)
-                        .border(0.8.dp, borderColor, cellShape)
+                        .background(
+                            if (isNowPeriod) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            else Color.Transparent,
+                            cellShape
+                        )
+                        .border(
+                            0.8.dp,
+                            if (isNowPeriod) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                            else borderColor,
+                            cellShape
+                        )
                 ) {
+                    // 左侧短竖条：比满宽红线更含蓄的「此刻」锚点
+                    if (isNowPeriod) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .width(3.dp)
+                                .fillMaxHeight(0.45f)
+                                .clip(RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp))
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                    }
                     Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("${row + 1}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
-                        Text(sTime, fontSize = 7.sp, color = MaterialTheme.colorScheme.outline, lineHeight = 9.sp)
-                        Text(eTime, fontSize = 7.sp, color = MaterialTheme.colorScheme.outline, lineHeight = 9.sp)
+                        Text(
+                            "${row + 1}",
+                            fontSize = if (isNowPeriod) 11.sp else 10.sp,
+                            color = if (isNowPeriod) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (isNowPeriod) FontWeight.Bold else FontWeight.Medium
+                        )
+                        Text(
+                            sTime,
+                            fontSize = if (isNowPeriod) 8.sp else 7.sp,
+                            color = if (isNowPeriod) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            fontWeight = if (isNowPeriod) FontWeight.SemiBold else null,
+                            lineHeight = 9.sp
+                        )
+                        Text(
+                            eTime,
+                            fontSize = if (isNowPeriod) 8.sp else 7.sp,
+                            color = if (isNowPeriod) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            fontWeight = if (isNowPeriod) FontWeight.SemiBold else null,
+                            lineHeight = 9.sp
+                        )
                     }
                 }
             }
 
             // 内容区不绘制网格线，仅保留节次列边框与表头，课程块之间以间隙+颜色区分
+
+            // 当前节次整行极淡底色：帮助横向定位「现在」，不遮挡课程块（块画在其上）
+            if (nowPeriodIndex != null) {
+                Box(
+                    modifier = Modifier
+                        .offset(x = periodColWidthDp, y = cellHeight * nowPeriodIndex)
+                        .width(colWidthDp.dp * colCount)
+                        .height(cellHeight)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.07f))
+                )
+            }
 
             // Touch overlay — handles empty cell long-press, placed BEFORE course blocks
             // so course blocks (rendered after) are on top and receive events first
@@ -322,16 +374,7 @@ fun WeekGrid(
                 }
             }
 
-            // 「现在」标记：细红线画在课程块之上，一眼定位当前时间（仅当前周显示）
-            if (nowLineOffset != null) {
-                Box(
-                    modifier = Modifier
-                        .offset(x = periodColWidthDp, y = cellHeight * nowLineOffset - 1.dp)
-                        .width(colWidthDp.dp * colCount)
-                        .height(2.dp)
-                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.85f))
-                )
-            }
+            // 「现在」位置由左侧节次列点亮 + 当前行淡色底标示，不再画满宽红线
         }
     }
 }
