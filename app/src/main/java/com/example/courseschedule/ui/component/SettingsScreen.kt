@@ -195,7 +195,7 @@ fun SettingsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("\u4f7f\u7528\u58c1\u7eb8\u53d6\u8272", fontSize = 14.sp)
                             Text(
-                                "\u5f00\u542f\u540e\u4e3b\u8272\u8ddf\u968f\u58c1\u7eb8\uff08Android 12+ \u624d\u751f\u6548\uff09",
+                                "\u5f00\u542f\u540e\u4e3b\u8272\u8ddf\u968f\u58c1\u7eb8\uff08Android 12+ \u624d\u751f\u6548\uff09\uff1b\u5173\u95ed\u5219\u7528\u5e94\u7528\u81ea\u5e26\u7684\u7eff\u8272\u4e3b\u9898",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

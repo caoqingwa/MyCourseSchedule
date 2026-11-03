@@ -22,8 +22,9 @@ object SettingsPrefs {
     private lateinit var prefs: SharedPreferences
     private val _fontScale = MutableStateFlow(1.0f)
     private val _themeMode = MutableStateFlow(THEME_SYSTEM)
-    // 默认关闭：保留 App 自己的品牌绿，避免被壁纸色顶掉
-    private val _dynamicColor = MutableStateFlow(false)
+    // 默认跟随壁纸取色（Android 12+），与 v2.17 及更早版本表现一致；
+    // 关闭后改用应用自带的绿色主题。
+    private val _dynamicColor = MutableStateFlow(true)
 
     val fontScale: StateFlow<Float> = _fontScale
     val themeMode: StateFlow<Int> = _themeMode
@@ -33,7 +34,7 @@ object SettingsPrefs {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         _fontScale.value = prefs.getFloat(KEY_FONT_SCALE, 1.0f).coerceIn(0.8f, 1.4f)
         _themeMode.value = prefs.getInt(KEY_THEME_MODE, THEME_SYSTEM).coerceIn(THEME_SYSTEM, THEME_DARK)
-        _dynamicColor.value = prefs.getBoolean(KEY_DYNAMIC_COLOR, false)
+        _dynamicColor.value = prefs.getBoolean(KEY_DYNAMIC_COLOR, true)
     }
 
     fun getFontScale(): Float = _fontScale.value
