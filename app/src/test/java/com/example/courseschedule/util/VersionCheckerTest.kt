@@ -23,5 +23,11 @@ class VersionCheckerTest {
     fun olderOrInvalidIsNotNewer() {
         assertFalse(VersionChecker.isNewer("2.9", "2.10"))
         assertFalse(VersionChecker.isNewer("abc", "2.10"))
+        assertFalse(VersionChecker.isNewer("v2.18.beta", "2.10"))
+    }
+
+    @Test
+    fun historicalVersion24IsOlderThan2182() {
+        assertFalse(VersionChecker.isNewer("v2.4", "2.18.2"))
     }
 }

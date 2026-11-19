@@ -122,30 +122,22 @@ fun AddCourseDialog(
                     label = { Text("\u6559\u5ba4") },
                     singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
-                WeekSelectionSection(
-                    totalWeeks = totalWeeks,
-                    selectedWeeks = selectedWeeks,
-                    weeksError = weeksError,
-                    onSelectionChange = { selectedWeeks = it; weeksError = false }
-                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = startPeriod, onValueChange = { startPeriod = it.filter { c -> c.isDigit() } },
-                        label = { Text("\u8d77\u8282") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.weight(1f),
+                    PeriodField(
+                        label = "起节",
+                        valueText = startPeriod,
+                        onValueTextChange = { startPeriod = it },
+                        periodCount = periodCount,
                         isError = spVal != null && (spVal < 1 || spVal > periodCount),
-                        supportingText = if (spVal != null && (spVal < 1 || spVal > periodCount)) {
-                            { Text("\u9650\u5236: 1~$periodCount\u8282", fontSize = 11.sp) }
-                        } else null
+                        modifier = Modifier.weight(1f)
                     )
-                    OutlinedTextField(
-                        value = endPeriod, onValueChange = { endPeriod = it.filter { c -> c.isDigit() } },
-                        label = { Text("\u6b63\u8282") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.weight(1f),
+                    PeriodField(
+                        label = "正节",
+                        valueText = endPeriod,
+                        onValueTextChange = { endPeriod = it },
+                        periodCount = periodCount,
                         isError = epVal != null && (epVal < 1 || epVal > periodCount),
-                        supportingText = if (epVal != null && (epVal < 1 || epVal > periodCount)) {
-                            { Text("\u9650\u5236: 1~$periodCount\u8282", fontSize = 11.sp) }
-                        } else null
+                        modifier = Modifier.weight(1f)
                     )
                 }
                 if (spVal != null && epVal != null && spVal > epVal) {
@@ -156,6 +148,12 @@ fun AddCourseDialog(
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
+                WeekSelectionSection(
+                    totalWeeks = totalWeeks,
+                    selectedWeeks = selectedWeeks,
+                    weeksError = weeksError,
+                    onSelectionChange = { selectedWeeks = it; weeksError = false }
+                )
             }
         },
         confirmButton = {
@@ -577,30 +575,22 @@ fun EditCourseDialog(
                     label = { Text("\u6559\u5ba4") },
                     singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
-                WeekSelectionSection(
-                    totalWeeks = totalWeeks,
-                    selectedWeeks = selectedWeeks,
-                    weeksError = weeksError,
-                    onSelectionChange = { selectedWeeks = it; weeksError = false }
-                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = sPeriod, onValueChange = { sPeriod = it.filter { c -> c.isDigit() } },
-                        label = { Text("\u8d77\u8282") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.weight(1f),
+                    PeriodField(
+                        label = "起节",
+                        valueText = sPeriod,
+                        onValueTextChange = { sPeriod = it },
+                        periodCount = periodCount,
                         isError = spVal != null && (spVal < 1 || spVal > periodCount),
-                        supportingText = if (spVal != null && (spVal < 1 || spVal > periodCount)) {
-                            { Text("\u9650\u5236: 1~$periodCount\u8282", fontSize = 11.sp) }
-                        } else null
+                        modifier = Modifier.weight(1f)
                     )
-                    OutlinedTextField(
-                        value = ePeriod, onValueChange = { ePeriod = it.filter { c -> c.isDigit() } },
-                        label = { Text("\u6b63\u8282") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true, modifier = Modifier.weight(1f),
+                    PeriodField(
+                        label = "正节",
+                        valueText = ePeriod,
+                        onValueTextChange = { ePeriod = it },
+                        periodCount = periodCount,
                         isError = epVal != null && (epVal < 1 || epVal > periodCount),
-                        supportingText = if (epVal != null && (epVal < 1 || epVal > periodCount)) {
-                            { Text("\u9650\u5236: 1~$periodCount\u8282", fontSize = 11.sp) }
-                        } else null
+                        modifier = Modifier.weight(1f)
                     )
                 }
                 if (spVal != null && epVal != null && spVal > epVal) {
@@ -611,6 +601,12 @@ fun EditCourseDialog(
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
+                WeekSelectionSection(
+                    totalWeeks = totalWeeks,
+                    selectedWeeks = selectedWeeks,
+                    weeksError = weeksError,
+                    onSelectionChange = { selectedWeeks = it; weeksError = false }
+                )
             }
         },
         confirmButton = {

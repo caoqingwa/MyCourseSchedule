@@ -1,28 +1,29 @@
 package com.example.courseschedule
 
 import android.graphics.Color as AndroidColor
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Schedule
+import com.example.courseschedule.data.db.entity.ScheduleChange
+import com.example.courseschedule.ui.component.ScheduleChangeDialog
 import com.example.courseschedule.util.weeksForSpan
 import com.example.courseschedule.BuildConfig
 import com.example.courseschedule.ui.navigation.Screen
@@ -41,15 +42,21 @@ import com.example.courseschedule.ui.screen.week.WeekViewModel
 import com.example.courseschedule.ui.screen.calendar.CalendarScreen
 import com.example.courseschedule.ui.theme.CourseScheduleTheme
 import com.example.courseschedule.util.DateUtils
+import com.example.courseschedule.util.NotificationHelper
 import com.example.courseschedule.util.SettingsPrefs
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneId
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    private var notificationExamId by mutableStateOf<Long?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        openNotification(intent)
         setContent {
             val themeMode by SettingsPrefs.themeMode.collectAsStateWithLifecycle()
             val dynamicColor by SettingsPrefs.dynamicColor.collectAsStateWithLifecycle()
@@ -68,27 +75,45 @@ class MainActivity : ComponentActivity() {
                 )
             }
             CourseScheduleTheme(darkTheme = darkTheme, dynamicColor = dynamicColor) {
-                MainApp()
+                MainApp(notificationExamId) {
+                    notificationExamId = null
+                    intent.removeExtra(NotificationHelper.EXTRA_EXAM_ID)
+                }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openNotification(intent)
+    }
+
+    private fun openNotification(intent: Intent) {
+        notificationExamId = intent.getLongExtra(NotificationHelper.EXTRA_EXAM_ID, -1L).takeIf { it > 0 }
     }
 }
 
 @Composable
-fun MainApp() {
+fun MainApp(notificationExamId: Long? = null, onNotificationOpened: () -> Unit = {}) {
     val pagerState = rememberPagerState(pageCount = { 3 })
     val coroutineScope = rememberCoroutineScope()
     val screens = bottomNavItems
 
     var selectedCourseId by remember { mutableStateOf<Long?>(null) }
     var selectedScheduleId by remember { mutableStateOf<Long?>(null) }
+    var selectedOriginalDay by remember { mutableStateOf<Long?>(null) }
+    var adjustment by remember { mutableStateOf<Pair<ScheduleChange, Boolean>?>(null) }
     val detailViewModel: CourseDetailViewModel = hiltViewModel()
     val detailState by detailViewModel.uiState.collectAsStateWithLifecycle()
     val weekViewModel: WeekViewModel = hiltViewModel()
+    val adjustmentState by weekViewModel.uiState.collectAsStateWithLifecycle()
 
     var showSettings by remember { mutableStateOf(false) }
     var showSettingsSemesterDialog by remember { mutableStateOf(false) }
+    var creatingSemester by remember { mutableStateOf(false) }
     var pendingAddCourse by remember { mutableStateOf(false) }
+    var pendingExamId by rememberSaveable { mutableStateOf<Long?>(null) }
     var importRequest by remember { mutableIntStateOf(0) }
     val fontScale by SettingsPrefs.fontScale.collectAsStateWithLifecycle()
     val density = LocalDensity.current
@@ -105,39 +130,22 @@ fun MainApp() {
         selectedCourseId?.let { detailViewModel.show(it) }
     }
 
-    val alpha = remember { Animatable(1f) }
-    val scale = remember { Animatable(1f) }
-    var transitioning by remember { mutableStateOf(false) }
-
-    val pageSpring = spring<Float>(
-        dampingRatio = 0.85f,
-        stiffness = Spring.StiffnessMediumLow
-    )
-
-    val navigateTo = remember(pagerState, transitioning, alpha, scale, pageSpring) {
-        { index: Int ->
-            val current = pagerState.currentPage
-            if (index != current && !transitioning) {
-                coroutineScope.launch {
-                    if (kotlin.math.abs(index - current) > 1) {
-                        transitioning = true
-                        coroutineScope {
-                            launch { alpha.animateTo(0f, pageSpring) }
-                            launch { scale.animateTo(0.92f, pageSpring) }
-                        }
-                        pagerState.scrollToPage(index)
-                        alpha.snapTo(0f)
-                        scale.snapTo(1.08f)
-                        coroutineScope {
-                            launch { alpha.animateTo(1f, pageSpring) }
-                            launch { scale.animateTo(1f, pageSpring) }
-                        }
-                        transitioning = false
-                    } else {
-                        pagerState.animateScrollToPage(index)
-                    }
-                }
-            }
+    var navigationJob by remember { mutableStateOf<Job?>(null) }
+    val navigateTo: (Int) -> Unit = { index ->
+        navigationJob?.cancel()
+        navigationJob = coroutineScope.launch { pagerState.scrollToPage(index) }
+    }
+    LaunchedEffect(notificationExamId) {
+        notificationExamId?.let {
+            showSettings = false
+            showSettingsSemesterDialog = false
+            selectedCourseId = null
+            detailViewModel.clear()
+            adjustment = null
+            editTarget = null
+            pendingExamId = it
+            navigateTo(2)
+            onNotificationOpened()
         }
     }
 
@@ -164,18 +172,19 @@ fun MainApp() {
             state = pagerState,
             modifier = Modifier
                 .padding(padding)
-                .fillMaxSize()
-                .graphicsLayer {
-                    this.alpha = alpha.value
-                    scaleX = scale.value
-                    scaleY = scale.value
-                },
-            userScrollEnabled = !transitioning,
-            beyondViewportPageCount = 0
+                .fillMaxSize(),
+            // 相邻页保持组合：来回切 Tab 时不必整页重建（周课表那页重建一次要组合上百个格子）
+            beyondViewportPageCount = 1
         ) { page ->
             when (page) {
                 0 -> TodayScreen(
-                    onCourseClick = { courseId, scheduleId ->
+                    onImportCourse = { importRequest++ },
+                    onExamClick = { examId ->
+                        pendingExamId = examId
+                        navigateTo(2)
+                    },
+                    onCourseClick = { courseId, scheduleId, originalDay ->
+                        selectedOriginalDay = originalDay
                         selectedCourseId = courseId
                         selectedScheduleId = scheduleId
                     },
@@ -186,7 +195,9 @@ fun MainApp() {
                     }
                 )
                 1 -> WeekScreen(
-                    onCourseClick = { courseId, scheduleId ->
+                    onOpenStoppedClass = { adjustment = it to true },
+                    onCourseClick = { courseId, scheduleId, originalDay ->
+                        selectedOriginalDay = originalDay
                         selectedCourseId = courseId
                         selectedScheduleId = scheduleId
                     },
@@ -195,6 +206,8 @@ fun MainApp() {
                     onAutoAddConsumed = { pendingAddCourse = false }
                 )
                 2 -> CalendarScreen(
+                    pendingExamId = pendingExamId,
+                    onPendingExamOpened = { pendingExamId = null },
                     onDayClick = { dayMillis, weekNumber ->
                         NavigationState.targetWeek = weekNumber
                         NavigationState.targetDayOfWeek = DateUtils.getDayOfWeek(dayMillis)
@@ -207,11 +220,24 @@ fun MainApp() {
     }
 
     detailState.course?.let { course ->
+        val schedule = detailState.schedules.firstOrNull { it.id == selectedScheduleId }
+        val originalDay = selectedOriginalDay
         CourseDetailSheet(
             course = course,
             schedules = detailState.schedules,
             scheduleRooms = detailState.scheduleRooms,
             roomSummary = detailState.roomSummary,
+            onAdjustOccurrence = if (schedule != null && originalDay != null) ({
+                val change = adjustmentState.scheduleChanges.firstOrNull {
+                    it.scheduleId == schedule.id && it.originalDay == originalDay
+                }
+                adjustment = (change ?: ScheduleChange(
+                    schedule.id, originalDay, originalDay, schedule.startPeriod, schedule.endPeriod,
+                    detailState.scheduleRooms[schedule.id]
+                )) to (change != null)
+                selectedCourseId = null
+                detailViewModel.clear()
+            }) else null,
             onDismiss = {
                 selectedCourseId = null
                 selectedScheduleId = null
@@ -241,6 +267,22 @@ fun MainApp() {
                 selectedScheduleId = null
                 detailViewModel.clear()
             }
+        )
+    }
+
+    adjustment?.let { (change, existing) ->
+        val semesterDays = adjustmentState.semester?.let { semester ->
+            val start = Instant.ofEpochMilli(semester.startDate).atZone(ZoneId.systemDefault()).toLocalDate()
+            val monday = start.minusDays((start.dayOfWeek.value - 1).toLong())
+            monday..monday.plusWeeks(semester.totalWeeks.toLong()).minusDays(1)
+        }
+        ScheduleChangeDialog(
+            initial = change,
+            existing = existing,
+            semesterDays = semesterDays,
+            onSave = weekViewModel::saveOccurrenceChange,
+            onUndo = { weekViewModel.removeOccurrenceChange(change.scheduleId, change.originalDay) },
+            onDismiss = { adjustment = null }
         )
     }
 
@@ -291,8 +333,13 @@ fun MainApp() {
     if (showSettings) {
         SettingsScreen(
             versionName = BuildConfig.VERSION_NAME,
+            captureBackup = weekViewModel::captureBackup,
+            restoreBackup = weekViewModel::restoreBackup,
             onBack = { showSettings = false },
-            onOpenSemesterSetup = { showSettingsSemesterDialog = true },
+            onOpenSemesterSetup = {
+                creatingSemester = false
+                showSettingsSemesterDialog = true
+            },
             onClearAll = {
                 weekViewModel.clearAllCourseData()
                 showSettings = false
@@ -301,30 +348,39 @@ fun MainApp() {
     }
     if (showSettingsSemesterDialog) {
         val settingsState = weekViewModel.uiState.collectAsStateWithLifecycle().value
+        key(settingsState.semester?.id, creatingSemester) {
         SemesterSetupDialog(
             semester = settingsState.semester,
-            savedPresets = settingsState.presets.filter { it.id != settingsState.semester?.id },
-            maxScheduledPeriod = settingsState.maxScheduledPeriod,
-            hasWeekendCourses = settingsState.hasWeekendCourses,
+            creating = creatingSemester,
+            savedPresets = if (creatingSemester) emptyList() else settingsState.presets.filter { it.id != settingsState.semester?.id },
+            maxScheduledPeriod = if (creatingSemester) 0 else settingsState.maxScheduledPeriod,
+            hasWeekendCourses = !creatingSemester && settingsState.hasWeekendCourses,
+            onCreateSemester = if (creatingSemester) null else ({ creatingSemester = true }),
             onDismiss = { showSettingsSemesterDialog = false },
             onConfirm = { name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson ->
-                weekViewModel.saveSemester(name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson)
+                if (creatingSemester) {
+                    weekViewModel.createSemester(name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson)
+                } else {
+                    weekViewModel.saveSemester(name, startDate, totalWeeks, periodCount, weekDays, periodTimesJson)
+                }
                 showSettingsSemesterDialog = false
             },
             onLoadPreset = { preset ->
-                weekViewModel.saveSemester(preset.name, preset.startDate, preset.totalWeeks, preset.periodCount, preset.weekDays, preset.periodTimesJson)
+                weekViewModel.selectSemester(preset)
+                showSettingsSemesterDialog = false
             },
             onDeletePreset = { weekViewModel.deletePreset(it) },
-            onImportClick = { importRequest++ }
+            onImportClick = if (creatingSemester) null else ({ importRequest++ })
         )
+        }
     }
 
     // xlsx 导入：以前藏在周课表齿轮里，现在全局设置的学期弹窗也能直接导入
     CourseImportFlow(
         requestKey = importRequest,
         onRequestHandled = { importRequest = 0 },
-        checkConflicts = { weekViewModel.checkImportConflicts(it) },
-        importCourses = { weekViewModel.importParsedCourses(it) }
+        previewImport = { weekViewModel.previewImport(it) },
+        importCourses = { semesterId, courses -> weekViewModel.importParsedCourses(semesterId, courses) }
     )
     }
 }

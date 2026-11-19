@@ -1,7 +1,9 @@
 package com.example.courseschedule.ui.screen.calendar
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -33,12 +35,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.example.courseschedule.data.db.entity.Exam
 import com.example.courseschedule.ui.component.AddExamDialog
 import com.example.courseschedule.ui.component.CalendarPicker
 import com.example.courseschedule.util.DateUtils
 import com.example.courseschedule.util.NotificationHelper
-import com.example.courseschedule.worker.ExamReminderWorker
+import com.example.courseschedule.util.scheduleOccurrences
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
@@ -48,21 +57,61 @@ import kotlinx.coroutines.launch
 fun CalendarScreen(
     onDayClick: (dayMillis: Long, weekNumber: Int) -> Unit,
     onOpenSettings: () -> Unit = {},
+    pendingExamId: Long? = null,
+    onPendingExamOpened: () -> Unit = {},
     viewModel: CalendarViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val zone = ZoneId.systemDefault()
+    var selectedDateMillis by rememberSaveable { mutableStateOf<Long?>(null) }
+    val changedDays = remember(state.scheduleChanges) {
+        buildSet {
+            state.scheduleChanges.forEach {
+                add(it.originalDay)
+                it.targetDay?.let { day -> add(day) }
+            }
+        }
+    }
     val cal = remember { Calendar.getInstance() }
     // rememberSaveable：Tab 被 Pager 销毁重建后仍保留当前浏览月份
     var displayMonth by rememberSaveable { mutableIntStateOf(cal.get(Calendar.MONTH)) }
     var displayYear by rememberSaveable { mutableIntStateOf(cal.get(Calendar.YEAR)) }
+    val semester = state.semester
+    val today = LocalDate.now(zone)
+    val firstDay = semester?.let {
+        val start = Instant.ofEpochMilli(it.startDate).atZone(zone).toLocalDate()
+        start.minusDays((start.dayOfWeek.value - 1).toLong())
+    }
+    val lastDay = firstDay?.plusWeeks((semester?.totalWeeks ?: 1).toLong())?.minusDays(1)
+    val anchor = if (firstDay != null && lastDay != null && today !in firstDay..lastDay) firstDay else today
+    LaunchedEffect(semester?.id, firstDay, lastDay) {
+        if (firstDay == null || lastDay == null) return@LaunchedEffect
+        val displayed = YearMonth.of(displayYear, displayMonth + 1)
+        if (displayed !in YearMonth.from(firstDay)..YearMonth.from(lastDay)) {
+            displayYear = anchor.year
+            displayMonth = anchor.monthValue - 1
+        }
+        val selected = selectedDateMillis?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+        if (selected == null || selected !in firstDay..lastDay) {
+            selectedDateMillis = if (anchor == today) null else anchor.atStartOfDay(zone).toInstant().toEpochMilli()
+        }
+    }
 
     // 倒计时按分钟自己走，否则停在这一页时「还剩 X 小时」会一直停在打开时的数字
     var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val summaryToday = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
     LaunchedEffect(Unit) {
         while (true) {
             nowMillis = System.currentTimeMillis()
             kotlinx.coroutines.delay(30_000L)
         }
+    }
+    var showPastExams by rememberSaveable(state.semester?.id) { mutableStateOf(false) }
+    val (upcomingExams, pastExams) = remember(state.exams, nowMillis) {
+        state.exams.partition { it.examDate > nowMillis }
+    }
+    val displayedExams = remember(upcomingExams, pastExams, showPastExams) {
+        if (showPastExams) upcomingExams + pastExams.asReversed() else upcomingExams
     }
 
     var showAddExamDialog by remember { mutableStateOf(false) }
@@ -72,17 +121,64 @@ fun CalendarScreen(
 
     var showExamDetailSheet by remember { mutableStateOf(false) }
     var examToShowDetail by remember { mutableStateOf<Exam?>(null) }
+    var examUnavailable by remember { mutableStateOf(false) }
+    LaunchedEffect(pendingExamId) {
+        val id = pendingExamId ?: return@LaunchedEffect
+        val exam = viewModel.findExam(id)
+        if (exam == null) {
+            examUnavailable = true
+        } else {
+            examToShowDetail = exam
+            showExamDetailSheet = true
+        }
+        onPendingExamOpened()
+    }
+    if (examUnavailable) {
+        AlertDialog(
+            onDismissRequest = { examUnavailable = false },
+            text = { Text("该考试记录已不存在") },
+            confirmButton = { TextButton(onClick = { examUnavailable = false }) { Text("确定") } }
+        )
+    }
 
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     // 考试列表按课程 id 取名称：建一次 map，避免每个 item 里 O(课程数) 的 find
     val courseMap = remember(state.courses) { state.courses.associateBy { it.id } }
+    val summaryDate = selectedDateMillis?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+        ?: Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+    val summaryCourses = remember(summaryDate, state.semester, state.schedules, state.scheduleChanges, zone) {
+        state.semester?.let { semester ->
+            val start = Instant.ofEpochMilli(semester.startDate).atZone(zone).toLocalDate()
+            scheduleOccurrences(summaryDate, start, semester.totalWeeks, state.schedules, state.scheduleChanges)
+        }.orEmpty()
+    }
+    val summaryExams = remember(summaryDate, state.exams, zone) {
+        val start = summaryDate.atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = summaryDate.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        state.exams.filter { it.examDate in start until end }
+    }
+    val summaryChanges = remember(summaryDate, state.scheduleChanges) {
+        state.scheduleChanges.filter { it.originalDay == summaryDate.toEpochDay() }
+    }
+    val schedulesById = remember(state.schedules) { state.schedules.associateBy { it.id } }
 
-    // Notification permission launcher
+    var systemNotificationsEnabled by remember {
+        mutableStateOf(NotificationHelper.canShowExamReminders(context))
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        val available = NotificationHelper.canShowExamReminders(context)
+        if (available && !systemNotificationsEnabled && state.notificationsEnabled) {
+            viewModel.setNotificationsEnabled(true)
+        }
+        systemNotificationsEnabled = available
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
+        systemNotificationsEnabled = NotificationHelper.canShowExamReminders(context)
         if (granted) {
             viewModel.setNotificationsEnabled(true)
         }
@@ -193,7 +289,7 @@ fun CalendarScreen(
                     } else {
                         hoursLeft.toString() + " \u5c0f\u65f6"
                     }
-                    DetailRow("\u5269\u4f59\u65f6\u95f4", remainText)
+                    DetailRow("考试状态", if (exam.examDate <= nowMillis) "已到开考时间" else "还有 $remainText")
                 }
             },
             confirmButton = {
@@ -224,18 +320,24 @@ fun CalendarScreen(
                 actions = {
                     // 回到今天：翻到别的月份后不用一周周划回来
                     IconButton(onClick = {
-                        val today = Calendar.getInstance()
-                        displayMonth = today.get(Calendar.MONTH)
-                        displayYear = today.get(Calendar.YEAR)
+                        displayMonth = anchor.monthValue - 1
+                        displayYear = anchor.year
+                        selectedDateMillis = if (anchor == today) null else anchor.atStartOfDay(zone).toInstant().toEpochMilli()
                     }) {
-                        Icon(Icons.Default.Today, contentDescription = "\u56de\u5230\u4eca\u5929")
+                        Icon(Icons.Default.Today, contentDescription = if (anchor == today) "回到今天" else "回到学期起始日期")
                     }
                     // Notification toggle
                     IconButton(onClick = {
-                        if (state.notificationsEnabled) {
+                        if (state.notificationsEnabled && !systemNotificationsEnabled) {
+                            context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            })
+                        } else if (state.notificationsEnabled) {
                             viewModel.setNotificationsEnabled(false)
                         } else {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                !NotificationHelper.hasNotificationPermission(context)
+                            ) {
                                 permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             } else {
                                 viewModel.setNotificationsEnabled(true)
@@ -243,9 +345,13 @@ fun CalendarScreen(
                         }
                     }) {
                         Icon(
-                            if (state.notificationsEnabled) Icons.Default.Notifications else Icons.Default.NotificationsOff,
-                            contentDescription = if (state.notificationsEnabled) "\u5173\u95ed\u63d0\u9192" else "\u5f00\u542f\u63d0\u9192",
-                            tint = if (state.notificationsEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            if (state.notificationsEnabled && systemNotificationsEnabled) Icons.Default.Notifications else Icons.Default.NotificationsOff,
+                            contentDescription = when {
+                                !state.notificationsEnabled -> "开启提醒"
+                                !systemNotificationsEnabled -> "系统通知已关闭，打开通知设置"
+                                else -> "关闭提醒"
+                            },
+                            tint = if (state.notificationsEnabled && systemNotificationsEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     // 全局设置
@@ -255,17 +361,21 @@ fun CalendarScreen(
                 }
             )
 
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(bottom = 84.dp)
+            ) {
                 item {
                     state.semester?.let { sem ->
                         CalendarPicker(
                             currentMonth = displayMonth,
                             currentYear = displayYear,
-                            todayMillis = state.todayMillis,
+                            todayMillis = summaryToday.atStartOfDay(zone).toInstant().toEpochMilli(),
                             semesterStartMillis = sem.startDate,
-                            currentWeek = state.currentWeek,
                             totalWeeks = sem.totalWeeks,
+                            changedDays = changedDays,
                             onDayClick = { dayMillis ->
+                                selectedDateMillis = dayMillis
                                 val weekNum = DateUtils.getWeekNumber(dayMillis, sem.startDate)
                                 onDayClick(dayMillis, weekNum)
                             },
@@ -279,6 +389,42 @@ fun CalendarScreen(
                                 showAddExamDialog = true
                             }
                         )
+                        if (changedDays.isNotEmpty()) {
+                            Text("日期下方圆点表示有课程调整", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text("${summaryDate.monthValue}月${summaryDate.dayOfMonth}日安排", style = MaterialTheme.typography.titleSmall)
+                        if (summaryCourses.isEmpty() && summaryExams.isEmpty() && summaryChanges.isEmpty()) {
+                            Text("当天没有安排", style = MaterialTheme.typography.bodySmall)
+                        }
+                        for (occurrence in summaryCourses) {
+                            val schedule = occurrence.schedule
+                            val name = courseMap[schedule.courseId]?.name ?: "课程"
+                            val room = if (occurrence.change != null) occurrence.change.roomName
+                                else schedule.roomId?.let { state.rooms[it] }
+                            val prefix = if (occurrence.change != null) "调课 · " else ""
+                            Text("$prefix 第 ${schedule.startPeriod}–${schedule.endPeriod} 节 · $name${room?.let { " · $it" }.orEmpty()}")
+                        }
+                        for (exam in summaryExams) {
+                            val time = Instant.ofEpochMilli(exam.examDate).atZone(zone)
+                                .format(DateTimeFormatter.ofPattern("HH:mm"))
+                            TextButton(onClick = { examToShowDetail = exam; showExamDetailSheet = true }) {
+                                Text("$time · ${exam.notes ?: courseMap[exam.courseId]?.name ?: "考试"}")
+                            }
+                        }
+                        for (change in summaryChanges) {
+                            if (change.keepOriginal || change.targetDay == change.originalDay) continue
+                            val name = schedulesById[change.scheduleId]?.let { courseMap[it.courseId]?.name } ?: "课程"
+                            val status = change.targetDay?.let { "改至 ${LocalDate.ofEpochDay(it)}" } ?: "停课"
+                            Text("$name · $status")
+                        }
                     }
                 }
 
@@ -286,12 +432,12 @@ fun CalendarScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "\u8003\u8bd5\u5b89\u6392",
+                            "即将考试",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.weight(1f)
                         )
-                        if (state.notificationsEnabled) {
+                        if (state.notificationsEnabled && systemNotificationsEnabled) {
                             Surface(
                                 color = MaterialTheme.colorScheme.primaryContainer,
                                 shape = RoundedCornerShape(8.dp)
@@ -309,7 +455,7 @@ fun CalendarScreen(
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text(
-                                    " \u63d0\u9192\u5df2\u5173\u95ed ",
+                                    if (state.notificationsEnabled) " 系统通知已关闭 " else " 提醒已关闭 ",
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -318,9 +464,15 @@ fun CalendarScreen(
                         }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
+                    if (pastExams.isNotEmpty()) {
+                        TextButton(onClick = { showPastExams = !showPastExams }) {
+                            val action = if (showPastExams) "收起" else "查看"
+                            Text("${action}历史考试（${pastExams.size}）")
+                        }
+                    }
                 }
 
-                if (state.exams.isEmpty()) {
+                if (upcomingExams.isEmpty()) {
                     item {
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -328,26 +480,29 @@ fun CalendarScreen(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
                         ) {
                             Text(
-                                "\u6682\u65e0\u8003\u8bd5\u5b89\u6392",
+                                "近期没有考试",
                                 modifier = Modifier.padding(14.dp),
                                 fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
-                } else {
-                    items(state.exams, key = { it.id }) { exam ->
+                }
+                    items(displayedExams, key = { it.id }) { exam ->
+                        val past = exam.examDate <= nowMillis
                         val hoursLeftVal = ((exam.examDate - nowMillis) / 3600_000L).toInt().coerceAtLeast(0)
                         val daysLeftVal = hoursLeftVal / 24
                         val badgeColor = when {
+                            past -> MaterialTheme.colorScheme.surfaceContainerHighest
                             daysLeftVal <= 3 -> MaterialTheme.colorScheme.error
                             daysLeftVal <= 7 -> MaterialTheme.colorScheme.tertiary
                             else -> MaterialTheme.colorScheme.primary
                         }
-                        val badgeText = if (daysLeftVal > 0) {
-                            " \u8fd8\u6709 " + daysLeftVal + "\u5929 "
-                        } else {
-                            " \u8fd8\u6709 " + hoursLeftVal + "\u5c0f\u65f6 "
+                        val badgeText = when {
+                            past -> "已开考"
+                            daysLeftVal > 0 -> "还有 ${daysLeftVal}天"
+                            hoursLeftVal > 0 -> "还有 ${hoursLeftVal}小时"
+                            else -> "不足 1 小时"
                         }
                         val courseName = courseMap[exam.courseId]?.name
                         val dateFmt = remember { SimpleDateFormat("M\u6708d\u65e5", Locale.getDefault()) }
@@ -395,13 +550,12 @@ fun CalendarScreen(
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onPrimary
+                                        color = if (past) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary
                                     )
                                 }
                             }
                         }
                     }
-                }
             }
         }
 

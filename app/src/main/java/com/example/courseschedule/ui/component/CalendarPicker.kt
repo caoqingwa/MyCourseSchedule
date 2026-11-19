@@ -12,6 +12,12 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import java.time.LocalDate
+import java.time.Instant
+import java.time.ZoneId
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -28,10 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.courseschedule.util.DateUtils
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
+import java.time.format.DateTimeFormatter
 import java.util.*
-
-private const val MILLIS_PER_DAY = 24 * 60 * 60 * 1000L
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -40,12 +44,12 @@ fun CalendarPicker(
     currentYear: Int,
     todayMillis: Long,
     semesterStartMillis: Long,
-    currentWeek: Int,
     totalWeeks: Int,
     onDayClick: (Long) -> Unit,
     onMonthChange: (Int, Int) -> Unit,
     onDayLongPress: ((Long) -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    changedDays: Set<Long> = emptySet()
 ) {
     val dows = listOf("\u4e00", "\u4e8c", "\u4e09", "\u56db", "\u4e94", "\u516d", "\u65e5")
     // 跟手位移：拖动实时平移月历（graphicsLayer 合成变换，无重绘）
@@ -53,21 +57,13 @@ fun CalendarPicker(
     val swipeThreshold = 60f
     val scope = rememberCoroutineScope()
 
-    val semStartCal = remember(semesterStartMillis) {
-        Calendar.getInstance().apply { timeInMillis = semesterStartMillis }
+    val firstDay = remember(semesterStartMillis) {
+        val start = Instant.ofEpochMilli(semesterStartMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+        start.minusDays((start.dayOfWeek.value - 1).toLong())
     }
-    val semStartDate = remember(semesterStartMillis) {
-        semStartCal.get(Calendar.YEAR) * 100 + semStartCal.get(Calendar.MONTH)
-    }
-    val semEndMillis = remember(semesterStartMillis, totalWeeks) {
-        semesterStartMillis + totalWeeks.toLong() * 7 * MILLIS_PER_DAY
-    }
-    val semEndCal = remember(semEndMillis) {
-        Calendar.getInstance().apply { timeInMillis = semEndMillis - MILLIS_PER_DAY }
-    }
-    val semEndDate = remember(semEndMillis) {
-        semEndCal.get(Calendar.YEAR) * 100 + semEndCal.get(Calendar.MONTH)
-    }
+    val lastDay = firstDay.plusWeeks(totalWeeks.toLong()).minusDays(1)
+    val semStartDate = firstDay.year * 100 + firstDay.monthValue - 1
+    val semEndDate = lastDay.year * 100 + lastDay.monthValue - 1
 
     fun prevMonth() {
         val m = if (currentMonth == 0) 11 else currentMonth - 1
@@ -187,17 +183,22 @@ fun CalendarPicker(
                 },
                 label = "monthFade"
             ) {
-                MonthGrid(currentYear, currentMonth, todayMillis, semesterStartMillis, currentWeek, onDayClick, onDayLongPress)
+                MonthGrid(currentYear, currentMonth, todayMillis, onDayClick, onDayLongPress, changedDays)
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-        val weekRangeText = remember(semesterStartMillis, currentWeek) {
-            val startMs = semesterStartMillis + (currentWeek - 1).toLong() * 7 * MILLIS_PER_DAY
-            val endMs = startMs + 6 * MILLIS_PER_DAY
-            val fmt1 = SimpleDateFormat("yyyy.MM.dd", Locale.getDefault())
-            val fmt2 = SimpleDateFormat("MM.dd", Locale.getDefault())
-            "\u5f53\u524d\uff1a\u7b2c$currentWeek\u5468 \u00b7 ${fmt1.format(Date(startMs))} ~ ${fmt2.format(Date(endMs))}"
+        val today = Instant.ofEpochMilli(todayMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+        val weekRangeText = remember(firstDay, lastDay, today) {
+            if (today !in firstDay..lastDay) {
+                "学期范围 · $firstDay 至 $lastDay"
+            } else {
+                val currentWeek = ((today.toEpochDay() - firstDay.toEpochDay()) / 7).toInt() + 1
+                val monday = firstDay.plusWeeks((currentWeek - 1).toLong())
+                val end = monday.plusDays(6)
+                val shortDate = DateTimeFormatter.ofPattern("MM.dd")
+                "当前：第${currentWeek}周 · ${monday.format(shortDate)} 至 ${end.format(shortDate)}"
+            }
         }
         Text(
             weekRangeText,
@@ -218,10 +219,9 @@ private fun MonthGrid(
     year: Int,
     month: Int,
     todayMillis: Long,
-    semesterStartMillis: Long,
-    currentWeek: Int,
     onDayClick: (Long) -> Unit,
-    onDayLongPress: ((Long) -> Unit)? = null
+    onDayLongPress: ((Long) -> Unit)?,
+    changedDays: Set<Long>
 ) {
     val cal = remember(year, month) {
         Calendar.getInstance().apply {
@@ -234,9 +234,8 @@ private fun MonthGrid(
         cal.get(Calendar.DAY_OF_MONTH)
     }
 
-    val dayData = remember(year, month, todayMillis, semesterStartMillis, currentWeek, daysInMonth) {
-        val todayCal = Calendar.getInstance()
-        val semCal = Calendar.getInstance().apply { timeInMillis = semesterStartMillis }
+    val dayData = remember(year, month, todayMillis, daysInMonth) {
+        val todayCal = Calendar.getInstance().apply { timeInMillis = todayMillis }
         val todayYear = todayCal.get(Calendar.YEAR)
         val todayMonth = todayCal.get(Calendar.MONTH)
         val todayDay = todayCal.get(Calendar.DAY_OF_MONTH)
@@ -248,8 +247,7 @@ private fun MonthGrid(
             val isToday = c.get(Calendar.YEAR) == todayYear &&
                     c.get(Calendar.MONTH) == todayMonth &&
                     c.get(Calendar.DAY_OF_MONTH) == todayDay
-            val weekNum = DateUtils.getWeekNumber(millis, semesterStartMillis)
-            result.add(Triple(d, isToday, weekNum == currentWeek))
+            result.add(Triple(d, isToday, DateUtils.getStartOfWeek(millis) == DateUtils.getStartOfWeek(todayMillis)))
         }
         result
     }
@@ -283,7 +281,10 @@ private fun MonthGrid(
                             inWeek -> MaterialTheme.colorScheme.onPrimaryContainer
                             else -> MaterialTheme.colorScheme.onSurface
                         }
-                        val cellModifier = Modifier.weight(1f).height(cellHeight)
+                        val changed = LocalDate.of(year, month + 1, d).toEpochDay() in changedDays
+                        val cellModifier = Modifier.weight(1f).height(cellHeight).then(
+                            if (changed) Modifier.semantics { stateDescription = "有课程调整" } else Modifier
+                        )
                         Box(
                             modifier = if (onDayLongPress != null) {
                                 cellModifier.combinedClickable(
@@ -315,6 +316,12 @@ private fun MonthGrid(
                                 }
                             } else {
                                 Text(d.toString(), fontSize = 12.sp, color = fg)
+                            }
+                            if (changed) {
+                                Box(
+                                    Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp)
+                                        .size(4.dp).background(fg, CircleShape)
+                                )
                             }
                         }
                         dayIdx++

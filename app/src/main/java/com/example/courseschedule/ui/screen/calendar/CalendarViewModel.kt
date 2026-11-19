@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.courseschedule.data.db.entity.Course
 import com.example.courseschedule.data.db.entity.Exam
+import com.example.courseschedule.data.db.entity.Schedule
+import com.example.courseschedule.data.db.entity.ScheduleChange
 import com.example.courseschedule.data.db.entity.Semester
 import com.example.courseschedule.data.repository.CourseRepository
 import com.example.courseschedule.util.DateUtils
@@ -33,6 +35,9 @@ class CalendarViewModel @Inject constructor(
         val currentDayOfWeek: Int = 1,
         val todayMillis: Long = System.currentTimeMillis(),
         val exams: List<Exam> = emptyList(),
+        val scheduleChanges: List<ScheduleChange> = emptyList(),
+        val schedules: List<Schedule> = emptyList(),
+        val rooms: Map<Long, String> = emptyMap(),
         val courses: List<Course> = emptyList(),
         val notificationsEnabled: Boolean = true
     )
@@ -47,8 +52,11 @@ class CalendarViewModel @Inject constructor(
         } else {
             combine(
                 repository.getExamsBySemester(semester.id),
-                repository.getCoursesBySemester(semester.id)
-            ) { exams, courses ->
+                repository.getCoursesBySemester(semester.id),
+                repository.getScheduleChanges(semester.id),
+                repository.getSchedulesBySemester(semester.id),
+                repository.getAllRooms()
+            ) { exams, courses, scheduleChanges, schedules, rooms ->
                 val now = System.currentTimeMillis()
                 val week = DateUtils.getWeekNumber(now, semester.startDate)
                 val dow = DateUtils.getDayOfWeek(now)
@@ -58,16 +66,15 @@ class CalendarViewModel @Inject constructor(
                     currentDayOfWeek = dow,
                     todayMillis = now,
                     exams = exams,
+                    scheduleChanges = scheduleChanges,
+                    schedules = schedules,
+                    rooms = rooms.associate { it.id to it.name },
                     courses = courses,
                     notificationsEnabled = enabled
                 )
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CalendarUiState())
-
-    init {
-        viewModelScope.launch { repository.deleteExpiredExams() }
-    }
 
     fun setNotificationsEnabled(enabled: Boolean) {
         NotificationPrefs.setEnabled(enabled)
@@ -99,6 +106,8 @@ class CalendarViewModel @Inject constructor(
             }
         }
     }
+
+    suspend fun findExam(id: Long): Exam? = repository.getExamDao().getById(id)
 
     fun deleteExam(exam: Exam) {
         viewModelScope.launch {

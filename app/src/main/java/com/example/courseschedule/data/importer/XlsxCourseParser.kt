@@ -14,7 +14,8 @@ import java.util.regex.Pattern
 data class ImportedCourse(
     val name: String,
     val teacher: String,
-    val schedules: List<ImportedSchedule>
+    val schedules: List<ImportedSchedule>,
+    val sourceRow: Int
 )
 
 /** 单个排课时段 */
@@ -27,6 +28,9 @@ data class ImportedSchedule(
     val weekType: Int, // 0 全周 / 1 单周 / 2 双周
     val roomName: String
 )
+
+data class ImportRowIssue(val row: Int, val reason: String)
+data class ParsedCourseImport(val courses: List<ImportedCourse>, val issues: List<ImportRowIssue>)
 
 /**
  * 解析课程表 xlsx。按表头名匹配列（列顺序可打乱），跳过课程设计类（名称含"课程设计"或上课时间为空）。
@@ -54,7 +58,7 @@ object XlsxCourseParser {
     )
 
     /** 解析 xlsx 输入流，返回课程列表 */
-    fun parse(input: InputStream): List<ImportedCourse> {
+    fun parse(input: InputStream): ParsedCourseImport {
         // 单次遍历 zip：sharedStrings.xml 与第一个 worksheet 均读到内存，避免重复包装关闭底层流
         val sharedBytes = ByteArrayOutputStream()
         var sheetBytes: ByteArray? = null
@@ -74,7 +78,7 @@ object XlsxCourseParser {
             }
         }
         val shared = parseSharedStrings(ByteArrayInputStream(sharedBytes.toByteArray()))
-        val sheet = sheetBytes ?: return emptyList()
+        val sheet = sheetBytes ?: error("找不到课表工作表")
         val rows = parseSheet(ByteArrayInputStream(sheet), shared)
         return rowsToCourses(rows)
     }
@@ -108,8 +112,9 @@ object XlsxCourseParser {
         }
     }
 
-    private fun parseSheet(input: InputStream, shared: List<String>): List<List<String>> {
-        val rows = mutableListOf<List<String>>()
+    private fun parseSheet(input: InputStream, shared: List<String>): List<Pair<Int, List<String>>> {
+        val rows = mutableListOf<Pair<Int, List<String>>>()
+        var rowNumber = 0
         val parser = newParser(input)
         var currentRow = mutableListOf<Pair<String, String>>() // 列字母 -> 值
         var inRow = false
@@ -134,6 +139,7 @@ object XlsxCourseParser {
                 XmlPullParser.START_TAG -> when (parser.name) {
                     "row" -> {
                         currentRow = mutableListOf(); inRow = true
+                        rowNumber = parser.getAttributeValue(null, "r")?.toIntOrNull() ?: (rowNumber + 1)
                     }
                     "c" -> {
                         cellRef = parser.getAttributeValue(null, "r") ?: ""
@@ -148,7 +154,7 @@ object XlsxCourseParser {
                     "row" -> {
                         if (inRow) {
                             // 按列字母排序补齐缺失单元格
-                            rows.add(expandRow(currentRow))
+                            rows.add(rowNumber to expandRow(currentRow))
                             inRow = false
                         }
                     }
@@ -195,9 +201,8 @@ object XlsxCourseParser {
     }
 
     /** 表头行 + 数据行 -> 课程列表 */
-    private fun rowsToCourses(rows: List<List<String>>): List<ImportedCourse> {
-        if (rows.isEmpty()) return emptyList()
-        val header = rows[0]
+    private fun rowsToCourses(rows: List<Pair<Int, List<String>>>): ParsedCourseImport {
+        val header = rows.firstOrNull()?.second ?: error("工作表为空")
         // 表头名 -> 列索引：按别名优先级匹配（如"教师姓名"优先于"任课教师"），列顺序可打乱
         val colMap = mutableMapOf<String, Int>()
         for ((key, aliases) in HEADER_ALIASES) {
@@ -209,23 +214,25 @@ object XlsxCourseParser {
                 }
             }
         }
-        val nameIdx = colMap["name"] ?: return emptyList()
+        val nameIdx = colMap["name"] ?: error("缺少课程名称列")
         val teacherIdx = colMap["teacher"] ?: -1
-        val timeIdx = colMap["time"] ?: -1
+        val timeIdx = colMap["time"] ?: error("缺少上课时间列")
         val placeIdx = colMap["place"] ?: -1
-        val weeksIdx = colMap["weeks"] ?: -1
-
         val courses = mutableListOf<ImportedCourse>()
-        for (r in 1 until rows.size) {
-            val row = rows[r]
-            if (row.size <= nameIdx) continue
-            val name = row[nameIdx].trim()
-            if (name.isEmpty()) continue
-            // 课程设计类跳过
-            if (name.contains("课程设计") || name.contains("课设")) continue
+        val issues = mutableListOf<ImportRowIssue>()
+        for ((number, row) in rows.drop(1)) {
+            if (row.all { it.isBlank() }) continue
+            val name = row.getOrNull(nameIdx)?.trim().orEmpty()
+            if (name.isEmpty() || name.contains("课程设计") || name.contains("课设")) {
+                issues.add(ImportRowIssue(number, if (name.isEmpty()) "缺少课程名称" else "已跳过课程设计"))
+                continue
+            }
 
             val timeRaw = row.getOrNull(timeIdx)?.trim() ?: ""
-            if (timeRaw.isEmpty()) continue
+            if (timeRaw.isEmpty()) {
+                issues.add(ImportRowIssue(number, "缺少上课时间"))
+                continue
+            }
 
             val teacher = row.getOrNull(teacherIdx)?.trim() ?: ""
             val places = row.getOrNull(placeIdx)?.split(';')?.map { it.trim() } ?: emptyList()
@@ -234,20 +241,21 @@ object XlsxCourseParser {
             for ((i, seg) in segments.withIndex()) {
                 val s = parseTimeSegment(seg, places.getOrNull(i) ?: "")
                 if (s != null) schedules.add(s)
+                else if (seg.isNotBlank()) issues.add(ImportRowIssue(number, "无法识别第 ${i + 1} 个上课时段"))
             }
-            if (schedules.isNotEmpty()) courses.add(ImportedCourse(name, teacher, schedules))
+            if (schedules.isNotEmpty()) courses.add(ImportedCourse(name, teacher, schedules, number))
         }
-        return courses
+        return ParsedCourseImport(courses, issues)
     }
 
     private fun parseTimeSegment(seg: String, room: String): ImportedSchedule? {
         val m = TIME_PATTERN.matcher(seg.trim())
         if (!m.find()) return null
         val day = m.group(1)?.let { DAY_MAP[it[0]] } ?: 1
-        val sp = m.group(2).toInt()
-        val ep = m.group(3).toInt()
-        val sw = m.group(4).toInt()
-        val ew = m.group(5).toInt()
+        val sp = m.group(2)?.toIntOrNull() ?: return null
+        val ep = m.group(3)?.toIntOrNull() ?: return null
+        val sw = m.group(4)?.toIntOrNull() ?: return null
+        val ew = m.group(5)?.toIntOrNull() ?: return null
         val wt = when (m.group(6)) {
             "单" -> 1
             "双" -> 2

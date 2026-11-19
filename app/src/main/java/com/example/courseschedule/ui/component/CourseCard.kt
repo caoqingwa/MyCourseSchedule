@@ -24,7 +24,14 @@ import com.example.courseschedule.ui.theme.getCourseColorByName
 import com.example.courseschedule.util.DateUtils
 
 @Immutable
-data class CourseWithSchedule(val course: Course, val schedule: Schedule, val roomName: String? = null)
+data class CourseWithSchedule(
+    val course: Course,
+    val schedule: Schedule,
+    val roomName: String? = null,
+    val occurrenceKey: String = schedule.id.toString(),
+    val originalDay: Long = 0L,
+    val startsAtMillis: Long = Long.MAX_VALUE
+)
 
 @Composable
 fun CourseCard(item: CourseWithSchedule, isCurrent: Boolean, nextInfo: String?, semester: Semester?, onClick: () -> Unit, modifier: Modifier = Modifier) {

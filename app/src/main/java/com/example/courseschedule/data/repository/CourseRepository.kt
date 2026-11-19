@@ -1,23 +1,47 @@
 package com.example.courseschedule.data.repository
 
 import androidx.room.Transaction
+import androidx.room.withTransaction
+import com.example.courseschedule.data.db.AppDatabase
+import com.example.courseschedule.data.db.ScheduleBackup
 import com.example.courseschedule.data.db.dao.*
 import com.example.courseschedule.data.db.entity.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import com.example.courseschedule.util.SettingsPrefs
+import com.example.courseschedule.util.DateUtils
+import java.time.Instant
+import java.time.ZoneId
 import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class CourseRepository @Inject constructor(
+    private val database: AppDatabase,
     private val semesterDao: SemesterDao,
     private val courseDao: CourseDao,
     private val scheduleDao: ScheduleDao,
     private val roomDao: RoomDao,
     private val examDao: ExamDao
 ) {
-    fun getCurrentSemester(): Flow<Semester?> = semesterDao.getCurrent()
+    fun getCurrentSemester(): Flow<Semester?> = combine(semesterDao.getAll(), SettingsPrefs.selectedSemesterId) { semesters, id ->
+        semesters.firstOrNull { it.id == id } ?: semesters.firstOrNull()
+    }.distinctUntilChanged()
+    suspend fun captureBackup(): ScheduleBackup = ScheduleBackup.capture(database)
+    suspend fun restoreBackup(backup: ScheduleBackup) {
+        backup.restore(database)
+        SettingsPrefs.selectSemester(0L)
+    }
+    fun getScheduleChanges(semesterId: Long): Flow<List<ScheduleChange>> =
+        database.scheduleChangeDao().observeBySemester(semesterId)
+
+    suspend fun saveScheduleChange(change: ScheduleChange) = database.scheduleChangeDao().save(change)
+
+    suspend fun removeScheduleChange(scheduleId: Long, originalDay: Long) =
+        database.scheduleChangeDao().remove(scheduleId, originalDay)
     fun getAllSemesters(): Flow<List<Semester>> = semesterDao.getAll()
     suspend fun getSemesterById(id: Long): Semester? = semesterDao.getById(id)
     suspend fun insertSemester(semester: Semester): Long = semesterDao.insert(semester)
@@ -79,19 +103,12 @@ class CourseRepository @Inject constructor(
     suspend fun getAllRoomsOnce(): List<Room> = roomDao.getAllOnce()
     suspend fun getRoomById(id: Long): Room? = roomDao.getById(id)
 
-    /** 改名教室；若新名字已被其他教室占用则直接复用该教室 id，避免 UNIQUE 冲突 */
-    suspend fun updateRoom(roomId: Long, newName: String): Long {
-        roomDao.getByName(newName)?.let { return it.id }
-        roomDao.getById(roomId)?.let { r: Room -> roomDao.update(r.copy(name = newName)) }
-        return roomId
-    }
-
     fun getExamsBySemester(semesterId: Long): Flow<List<Exam>> = examDao.getBySemester(semesterId)
     fun getExamDao(): ExamDao = examDao
     suspend fun insertExam(exam: Exam): Long = examDao.insert(exam)
     suspend fun updateExam(exam: Exam) = examDao.update(exam)
     suspend fun deleteExam(exam: Exam) = examDao.delete(exam)
-    suspend fun deleteExpiredExams() = examDao.deleteExpired(System.currentTimeMillis())
+    suspend fun deleteExpiredExams(beforeMillis: Long) = examDao.deleteExpired(beforeMillis)
 
     /** 删除单个排课时段；若该课程已无其他时段则连同课程一并删除，并回收空教室 */
     @Transaction
@@ -123,14 +140,36 @@ class CourseRepository @Inject constructor(
         return courseId
     }
 
-    @Transaction
     suspend fun replaceSchedules(
-        courseId: Long,
+        course: Course,
         oldSchedules: List<Schedule>,
-        newSchedules: List<Schedule>
-    ) {
+        newSchedules: List<Schedule>,
+        roomName: String
+    ) = database.withTransaction {
+        val semester = semesterDao.getById(course.semesterId) ?: return@withTransaction
+        val start = Instant.ofEpochMilli(semester.startDate).atZone(ZoneId.systemDefault()).toLocalDate()
+        val firstDay = start.toEpochDay() - start.dayOfWeek.value + 1
+        val changesDao = database.scheduleChangeDao()
+        val changes = changesDao.getBySchedules(oldSchedules.map { it.id })
+        val roomId = roomName.trim().takeIf { it.isNotEmpty() }?.let {
+            insertRoom(Room(name = it)).also { id -> check(id > 0) { "无法保存教室" } }
+        }
+        courseDao.update(course)
         oldSchedules.forEach { scheduleDao.delete(it) }
-        newSchedules.forEach { scheduleDao.insert(it.copy(courseId = courseId)) }
+        val replacements = newSchedules.map {
+            it to scheduleDao.insert(it.copy(courseId = course.id, roomId = roomId))
+        }
+        for (change in changes) {
+            val offset = change.originalDay - firstDay
+            if (offset !in 0L until semester.totalWeeks.toLong() * 7) continue
+            val week = (offset / 7).toInt() + 1
+            val (replacement, id) = replacements.firstOrNull { (schedule, _) ->
+                DateUtils.isScheduleActive(schedule.startWeek, schedule.endWeek, schedule.weekType, week)
+            } ?: continue
+            val originalDay = firstDay + (week - 1) * 7L + replacement.dayOfWeek - 1
+            changesDao.save(change.copy(scheduleId = id, originalDay = originalDay))
+        }
+        roomDao.deleteUnused()
     }
 
     /** 清除所有课程相关数据（课程/课表/考试/教室），保留学期设置 */
@@ -143,15 +182,29 @@ class CourseRepository @Inject constructor(
     }
 
     /** 批量导入（幂等）：学期内同名课程复用，已存在的同课程同时段跳过；每时段独立解析并复用同名教室 */
-    @Transaction
-    suspend fun importCourseWithSchedules(
+    suspend fun importCourses(
+        semesterId: Long,
+        courses: List<Triple<String, String, List<Pair<Schedule, String?>>>>
+    ): Pair<Int, Int> = database.withTransaction {
+        var coursesImported = 0
+        var schedulesImported = 0
+        for ((name, teacher, schedules) in courses) {
+            val added = importCourseWithSchedules(semesterId, name, teacher, schedules)
+            if (added > 0) coursesImported++
+            schedulesImported += added
+        }
+        coursesImported to schedulesImported
+    }
+
+    private suspend fun importCourseWithSchedules(
         semesterId: Long,
         name: String,
         teacher: String,
         schedules: List<Pair<Schedule, String?>>
-    ): Long {
+    ): Int {
         val courseId = courseDao.getByNameInSemester(semesterId, name)?.id
             ?: courseDao.insert(Course(semesterId = semesterId, name = name, teacher = teacher, color = "0"))
+        var added = 0
         for ((sched, roomName) in schedules) {
             val duplicate = scheduleDao.findDuplicate(
                 courseId = courseId, dayOfWeek = sched.dayOfWeek,
@@ -161,7 +214,8 @@ class CourseRepository @Inject constructor(
             if (duplicate != null) continue
             val roomId = roomName?.takeIf { it.isNotBlank() }?.let { insertRoom(Room(name = it)) }
             scheduleDao.insert(sched.copy(courseId = courseId, roomId = roomId))
+            added++
         }
-        return courseId
+        return added
     }
 }

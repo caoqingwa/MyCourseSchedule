@@ -35,12 +35,11 @@ object VersionChecker {
 
     /** "v2.7" vs "2.7" → true；版本号解析失败返回 false */
     fun isNewer(latest: String, current: String): Boolean {
-        fun parse(v: String): List<Int> =
-            v.trim().trimStart('v', 'V').split('.')
-                .mapNotNull { it.toIntOrNull() }
-        val l = parse(latest)
-        val c = parse(current)
-        if (l.isEmpty() || c.isEmpty()) return false
+        fun parse(v: String): List<Int>? =
+            v.trim().removePrefix("v").removePrefix("V").split('.')
+                .map { it.toIntOrNull()?.takeIf { number -> number >= 0 } ?: return null }
+        val l = parse(latest) ?: return false
+        val c = parse(current) ?: return false
         for (i in 0 until maxOf(l.size, c.size)) {
             val a = l.getOrElse(i) { 0 }
             val b = c.getOrElse(i) { 0 }

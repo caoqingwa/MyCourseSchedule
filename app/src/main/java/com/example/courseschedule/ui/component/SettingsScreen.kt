@@ -28,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.example.courseschedule.util.AppUpdater
+import com.example.courseschedule.data.db.ScheduleBackup
 import com.example.courseschedule.util.SettingsPrefs
 import com.example.courseschedule.util.VersionChecker
 import java.io.File
@@ -56,6 +57,8 @@ fun SettingsScreen(
     versionName: String,
     onBack: () -> Unit,
     onOpenSemesterSetup: () -> Unit,
+    captureBackup: suspend () -> ScheduleBackup,
+    restoreBackup: suspend (ScheduleBackup) -> Unit,
     onClearAll: () -> Unit
 ) {
     val outerDensity = LocalDensity.current
@@ -226,6 +229,8 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            BackupSettings(captureBackup, restoreBackup)
 
             // ── 检查更新 + 版本号 ──
             Card(

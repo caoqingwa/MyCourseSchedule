@@ -20,7 +20,8 @@ fun CourseDetailSheet(
     scheduleRooms: Map<Long, String>,
     roomSummary: String,
     onDismiss: () -> Unit,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    onAdjustOccurrence: (() -> Unit)? = null
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -54,6 +55,9 @@ fun CourseDetailSheet(
             DetailRow(icon = "\u23f0", label = "\u65f6\u95f4\u5b89\u6392", value = scheduleInfo.ifEmpty { "\u5f85\u914d\u7f6e" })
 
             Spacer(modifier = Modifier.height(20.dp))
+            onAdjustOccurrence?.let { action ->
+                FilledTonalButton(onClick = action, modifier = Modifier.fillMaxWidth()) { Text("调整本次") }
+            }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss) { Text("\u5173\u95ed") }
                 Spacer(modifier = Modifier.width(8.dp))

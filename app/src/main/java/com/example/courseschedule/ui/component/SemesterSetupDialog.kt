@@ -37,6 +37,7 @@ import java.util.*
 @Composable
 fun SemesterSetupDialog(
     semester: Semester?,
+    creating: Boolean = false,
     savedPresets: List<Semester>,
     maxScheduledPeriod: Int = 0,
     hasWeekendCourses: Boolean = false,
@@ -44,14 +45,15 @@ fun SemesterSetupDialog(
     onConfirm: (name: String, startDateMillis: Long, totalWeeks: Int, periodCount: Int, weekDays: Int, periodTimesJson: String) -> Unit,
     onLoadPreset: (Semester) -> Unit,
     onDeletePreset: (Semester) -> Unit,
+    onCreateSemester: (() -> Unit)? = null,
     onImportClick: (() -> Unit)? = null
 ) {
     val cal = Calendar.getInstance().apply {
-        timeInMillis = semester?.startDate ?: System.currentTimeMillis()
+        timeInMillis = if (creating) System.currentTimeMillis() else semester?.startDate ?: System.currentTimeMillis()
         set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }
 
-    var name by remember { mutableStateOf(semester?.name ?: "") }
+    var name by remember { mutableStateOf(if (creating) "" else semester?.name.orEmpty()) }
     var selectedYear by remember { mutableIntStateOf(cal.get(Calendar.YEAR)) }
     var selectedMonth by remember { mutableIntStateOf(cal.get(Calendar.MONTH) + 1) }
     var selectedDay by remember { mutableIntStateOf(cal.get(Calendar.DAY_OF_MONTH)) }
@@ -112,13 +114,13 @@ fun SemesterSetupDialog(
             // Title
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    if (semester == null) "\u8bbe\u7f6e\u5b66\u671f" else "\u7f16\u8f91\u5b66\u671f",
+                    if (creating) "新建学期" else semester?.name ?: "设置学期",
                     fontSize = 20.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
                 if (savedPresets.isNotEmpty()) {
                     TextButton(onClick = { showPresetList = !showPresetList }) {
-                        Text("\u9884\u8bbe", fontSize = 13.sp)
+                        Text("切换学期", fontSize = 13.sp)
                     }
                 }
                 if (onImportClick != null) {
@@ -126,6 +128,9 @@ fun SemesterSetupDialog(
                         Text("\u5bfc\u5165\u8bfe\u7a0b", fontSize = 13.sp)
                     }
                 }
+            }
+            onCreateSemester?.let { action ->
+                TextButton(onClick = action) { Text("新建学期") }
             }
 
             // Presets
@@ -135,7 +140,7 @@ fun SemesterSetupDialog(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                 ) {
                     Column(modifier = Modifier.padding(8.dp)) {
-                        Text("\u5df2\u4fdd\u5b58\u9884\u8bbe", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("历史学期", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(modifier = Modifier.height(4.dp))
                         savedPresets.forEach { preset ->
                             Row(
@@ -143,7 +148,7 @@ fun SemesterSetupDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(preset.name, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                                TextButton(onClick = { onLoadPreset(preset) }) { Text("\u52a0\u8f7d", fontSize = 12.sp) }
+                                TextButton(onClick = { onLoadPreset(preset) }) { Text("查看", fontSize = 12.sp) }
                                 IconButton(onClick = { presetToDelete = preset }, modifier = Modifier.size(28.dp)) {
                                     Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                                 }

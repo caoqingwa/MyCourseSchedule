@@ -52,9 +52,10 @@ fun WeekGrid(
     onCellClick: (Course, Schedule) -> Unit,
     onCellLongClick: (dayOfWeek: Int, period: Int) -> Unit,
     onCourseLongClick: (Course, Schedule) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showWeekend: Boolean = false
 ) {
-    val weekDays = semester?.weekDays ?: 5
+    val weekDays = if (showWeekend) 7 else semester?.weekDays ?: 5
     val colCount = weekDays.coerceIn(5, 7)
     val dayNames = if (colCount == 7) DateUtils.DAY_NAMES_7 else DateUtils.DAY_NAMES_5
     val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
@@ -344,7 +345,8 @@ fun WeekGrid(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             val roomName = block.schedule.roomId?.let { roomMap[it] } ?: ""
-                            val displayName = if (roomName.isNotBlank()) block.course.name + "@" + roomName else block.course.name
+                            val title = if ((block.schedule.roomId ?: 0L) < 0L) "调课 · ${block.course.name}" else block.course.name
+                            val displayName = if (roomName.isNotBlank()) "$title@$roomName" else title
                             // 按方块实际可用高度自适应行数，尽量把课程名完整显示（原来固定 3 行会过早省略）
                             val labelHeight = if (span > 1) with(density) { 10.sp.toDp() } else 0.dp
                             val maxLines = ((blockHeight - blockTextPadding * 2 - labelHeight) /

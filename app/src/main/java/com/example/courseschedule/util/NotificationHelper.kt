@@ -1,9 +1,11 @@
 package com.example.courseschedule.util
 
 import android.app.PendingIntent
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -12,10 +14,13 @@ import com.example.courseschedule.MainActivity
 
 object NotificationHelper {
     private const val CHANNEL_EXAM = "exam_reminder"
+    const val EXTRA_EXAM_ID = "com.example.courseschedule.EXAM_ID"
 
-    private fun baseIntent(context: Context): PendingIntent {
+    private fun examIntent(context: Context, examId: Long): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            data = Uri.parse("courseschedule://exam/$examId")
+            putExtra(EXTRA_EXAM_ID, examId)
         }
         return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
@@ -26,8 +31,14 @@ object NotificationHelper {
         } else true
     }
 
-    fun showExamReminder(context: Context, examName: String, hoursUntilExam: Int, notificationId: Int) {
-        if (!hasNotificationPermission(context)) return
+    fun canShowExamReminders(context: Context): Boolean =
+        hasNotificationPermission(context) &&
+            NotificationManagerCompat.from(context).areNotificationsEnabled() &&
+            context.getSystemService(NotificationManager::class.java)
+                .getNotificationChannel(CHANNEL_EXAM)?.importance != NotificationManager.IMPORTANCE_NONE
+
+    fun showExamReminder(context: Context, examName: String, hoursUntilExam: Int, examId: Long): Boolean {
+        if (!canShowExamReminders(context)) return false
         val timeText = when {
             hoursUntilExam >= 48 -> (hoursUntilExam / 24).toString() + " \u5929"
             hoursUntilExam >= 24 -> "1 \u5929" + (hoursUntilExam % 24).toString() + "\u5c0f\u65f6"
@@ -39,11 +50,14 @@ object NotificationHelper {
             .setContentText(examName + " \u8fd8\u6709 " + timeText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(examName + " \u8fd8\u6709 " + timeText + "\uff0c\u8bf7\u505a\u597d\u51c6\u5907\uff01"))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(baseIntent(context))
+            .setContentIntent(examIntent(context, examId))
             .setAutoCancel(true)
             .build()
-        try {
-            NotificationManagerCompat.from(context).notify(notificationId, notification)
-        } catch (_: SecurityException) {}
+        return try {
+            NotificationManagerCompat.from(context).notify(examId.toString(), 0, notification)
+            true
+        } catch (_: SecurityException) {
+            false
+        }
     }
 }

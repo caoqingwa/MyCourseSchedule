@@ -1,14 +1,13 @@
 package com.example.courseschedule.ui.screen.today
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -19,16 +18,22 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.courseschedule.ui.component.CourseCard
 import com.example.courseschedule.ui.component.CourseScheduleTopBar
 import com.example.courseschedule.util.DateUtils
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodayScreen(
-    onCourseClick: (courseId: Long, scheduleId: Long) -> Unit,
+    onCourseClick: (courseId: Long, scheduleId: Long, originalDay: Long) -> Unit,
     onOpenSettings: () -> Unit = {},
     onAddCourse: () -> Unit = {},
+    onImportCourse: () -> Unit = {},
+    onExamClick: (Long) -> Unit = {},
     viewModel: TodayViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var showCompleted by rememberSaveable(state.todayLabel) { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -57,10 +62,15 @@ fun TodayScreen(
                 }
             }
 
-            if (state.isEmpty) {
+            if (state.isEmpty && state.exams.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         when {
+                            !state.hasSchedule -> {
+                                Text("还没录入课表")
+                                FilledTonalButton(onClick = onImportCourse) { Text("导入 Excel") }
+                                TextButton(onClick = onAddCourse) { Text("手动排课") }
+                            }
                             state.beforeSemesterStart -> {
                                 Text("\ud83d\udcc5", fontSize = 48.sp)
                                 Spacer(modifier = Modifier.height(12.dp))
@@ -101,7 +111,7 @@ fun TodayScreen(
                 }
             } else {
                 val nextInfoList = remember(state.upcomingCourses) {
-                    state.upcomingCourses.mapIndexed { idx, item ->
+                    state.upcomingCourses.mapIndexed { idx, _ ->
                         if (idx < state.upcomingCourses.lastIndex) {
                             val next = state.upcomingCourses[idx + 1]
                             "\u4e0b\u4e00\u8282\uff1a" + next.course.name + " " + next.schedule.startPeriod + "-" + next.schedule.endPeriod + "\u8282"
@@ -115,26 +125,68 @@ fun TodayScreen(
                 ) {
                     item(key = "header") {
                         Text(
-                            "\u4eca\u65e5\u5269\u4f59 " + state.totalRemaining + " \u8282\u8bfe",
+                            when {
+                                state.isEmpty -> "今天没有课程"
+                                state.totalRemaining == 0 -> "今天的课已结束"
+                                state.currentCourses.isNotEmpty() -> "正在上课"
+                                state.exams.isNotEmpty() -> "今日安排"
+                                else -> "下一节课"
+                            },
                             fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    state.currentCourse?.let { cws ->
-                        item(key = "current") {
+                    items(state.currentCourses, key = { it.occurrenceKey }) { cws ->
                             val nxt = remember(state.upcomingCourses) {
                                 state.upcomingCourses.firstOrNull()?.let {
                                     "\u4e0b\u4e00\u8282\uff1a" + it.course.name + " " + it.schedule.startPeriod + "-" + it.schedule.endPeriod + "\u8282"
                                 }
                             }
-                            CourseCard(cws, isCurrent = true, nextInfo = nxt, semester = state.semester, onClick = { onCourseClick(cws.course.id, cws.schedule.id) })
+                            CourseCard(cws, isCurrent = true, nextInfo = nxt, semester = state.semester, onClick = { onCourseClick(cws.course.id, cws.schedule.id, cws.originalDay) })
+                    }
+                    var nextCourseIndex = 0
+                    var nextExamIndex = 0
+                    while (nextCourseIndex < state.upcomingCourses.size || nextExamIndex < state.exams.size) {
+                        val course = state.upcomingCourses.getOrNull(nextCourseIndex)
+                        val exam = state.exams.getOrNull(nextExamIndex)
+                        if (course != null && (exam == null || course.startsAtMillis <= exam.exam.examDate)) {
+                            val index = nextCourseIndex++
+                            item(key = course.occurrenceKey) {
+                                if (index == 0 && state.currentCourses.isEmpty() && state.exams.isNotEmpty()) {
+                                    Text("下一节课", style = MaterialTheme.typography.labelMedium)
+                                }
+                                CourseCard(
+                                    course, isCurrent = false, nextInfo = nextInfoList[index], semester = state.semester,
+                                    onClick = { onCourseClick(course.course.id, course.schedule.id, course.originalDay) }
+                                )
+                            }
+                        } else if (exam != null) {
+                            nextExamIndex++
+                            item(key = "exam_${exam.exam.id}") {
+                                val time = remember(exam.exam.examDate) {
+                                    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(exam.exam.examDate))
+                                }
+                                Card(onClick = { onExamClick(exam.exam.id) }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("$time · 考试 · ${exam.name}", modifier = Modifier.padding(16.dp))
+                                }
+                            }
                         }
                     }
-                    itemsIndexed(
-                        items = state.upcomingCourses,
-                        key = { _, item -> item.schedule.id }
-                    ) { idx, item ->
-                        CourseCard(item, isCurrent = false, nextInfo = nextInfoList[idx], semester = state.semester, onClick = { onCourseClick(item.course.id, item.schedule.id) })
+                    if (state.completedCourses.isNotEmpty()) {
+                        item(key = "completed") {
+                            TextButton(onClick = { showCompleted = !showCompleted }) {
+                                val action = if (showCompleted) "收起" else "查看"
+                                Text("${action}已结束课程（${state.completedCourses.size}）")
+                            }
+                        }
+                        if (showCompleted) {
+                            items(state.completedCourses, key = { it.occurrenceKey }) { item ->
+                                CourseCard(
+                                    item, isCurrent = false, nextInfo = null, semester = state.semester,
+                                    onClick = { onCourseClick(item.course.id, item.schedule.id, item.originalDay) }
+                                )
+                            }
+                        }
                     }
                 }
             }

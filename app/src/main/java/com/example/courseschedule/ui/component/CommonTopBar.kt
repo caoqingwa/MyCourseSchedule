@@ -9,6 +9,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -33,12 +40,21 @@ fun CourseScheduleTopBar(
                 Text(title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.width(8.dp))
                 Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.small) {
-                    Text(
-                        "\u7b2c${selectedWeek}\u5468",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                        fontSize = 12.sp,
-                        color = if (selectedWeek != currentWeek) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    AnimatedContent(
+                        targetState = selectedWeek to currentWeek,
+                        transitionSpec = {
+                            (fadeIn(tween(150)) + slideInVertically(tween(150)) { it / 3 })
+                                .togetherWith(fadeOut(tween(100)) + slideOutVertically(tween(100)) { -it / 3 })
+                        },
+                        label = "weekChip"
+                    ) { (week, cur) ->
+                        Text(
+                            "\u7b2c${week}\u5468",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                            fontSize = 12.sp,
+                            color = if (week != cur) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
                 if (selectedWeek != currentWeek && onBackToCurrentWeek != null) {
                     Spacer(modifier = Modifier.width(6.dp))

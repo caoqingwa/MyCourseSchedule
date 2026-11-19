@@ -8,8 +8,8 @@ import com.example.courseschedule.data.db.dao.*
 import com.example.courseschedule.data.db.entity.*
 
 @Database(
-    entities = [Semester::class, Course::class, Schedule::class, Room::class, Exam::class],
-    version = 9,
+    entities = [Semester::class, Course::class, Schedule::class, Room::class, Exam::class, ScheduleChange::class],
+    version = 10,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -18,8 +18,27 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun scheduleDao(): ScheduleDao
     abstract fun roomDao(): RoomDao
     abstract fun examDao(): ExamDao
+    abstract fun scheduleChangeDao(): ScheduleChangeDao
 
     companion object {
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS schedule_changes (
+                        scheduleId INTEGER NOT NULL,
+                        originalDay INTEGER NOT NULL,
+                        targetDay INTEGER,
+                        startPeriod INTEGER NOT NULL,
+                        endPeriod INTEGER NOT NULL,
+                        roomName TEXT,
+                        keepOriginal INTEGER NOT NULL,
+                        PRIMARY KEY(scheduleId, originalDay),
+                        FOREIGN KEY(scheduleId) REFERENCES schedules(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )""".trimIndent()
+                )
+            }
+        }
+
         // v1→v2：semesters 表新增 periodCount 与 periodTimesJson 两列（NOT NULL 需带默认值）
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
