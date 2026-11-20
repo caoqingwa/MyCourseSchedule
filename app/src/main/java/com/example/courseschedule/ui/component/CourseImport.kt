@@ -147,7 +147,11 @@ fun CourseImportFlow(
 
     // 导入结果确认
     if (showImportConfirm) {
-        val conflictCount = importConflicts.size
+        val conflictedSlots = remember(importConflicts) {
+            importConflicts.map { it.sourceRow to it.schedule }.toSet()
+        }
+        val conflictCount = conflictedSlots.size
+        var showConflicts by remember { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { showImportConfirm = false },
             title = { Text("\u5bfc\u5165\u8bfe\u7a0b\u786e\u8ba4") },
@@ -183,7 +187,7 @@ fun CourseImportFlow(
                     if (conflictCount > 0) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "\u26a0 \u4e0e\u5df2\u6709\u8bfe\u7a0b\u65f6\u95f4\u51b2\u7a81\u7684\u65f6\u6bb5 ${conflictCount} \u4e2a\uff1a",
+                            "$conflictCount 个排课时段存在冲突",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.error,
                             fontWeight = FontWeight.SemiBold
@@ -192,20 +196,18 @@ fun CourseImportFlow(
                             "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db",
                             "\u5468\u4e94", "\u5468\u516d", "\u5468\u65e5"
                         )
-                        importConflicts.take(6).forEach {
-                            Text(
-                                "\u2022 ${it.importedCourseName} \u4e0e ${it.existingName} \uff08${dayNames.getOrElse(it.dayOfWeek - 1) { "?" }}\u7b2c${it.startPeriod}-${it.endPeriod}\u8282\uff09",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.error,
-                                maxLines = 1
-                            )
+                        TextButton(onClick = { showConflicts = !showConflicts }) {
+                            Text(if (showConflicts) "收起冲突明细" else "查看冲突明细")
                         }
-                        if (conflictCount > 6) {
-                            Text(
-                                "...\u7b49${conflictCount}\u4e2a\u51b2\u7a81",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        if (showConflicts) {
+                            importConflicts.forEach {
+                                val schedule = it.schedule
+                                val day = dayNames.getOrElse(schedule.dayOfWeek - 1) { "?" }
+                                Text(
+                                    "第 ${it.sourceRow} 行 · ${it.importedCourseName} 与 ${it.existingName}（$day 第 ${schedule.startPeriod}–${schedule.endPeriod} 节）",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
                         }
                     }
                 }
@@ -218,8 +220,10 @@ fun CourseImportFlow(
             dismissButton = {
                 Row {
                     if (conflictCount > 0) {
-                        val conflictNames = importConflicts.map { it.importedCourseName }.toSet()
-                        val remaining = parsedCourses.filter { it.name !in conflictNames }
+                        val remaining = parsedCourses.mapNotNull { course ->
+                            val schedules = course.schedules.filterNot { (course.sourceRow to it) in conflictedSlots }
+                            if (schedules.isEmpty()) null else course.copy(schedules = schedules)
+                        }
                         TextButton(enabled = remaining.isNotEmpty(), onClick = {
                             save(remaining)
                         }) {

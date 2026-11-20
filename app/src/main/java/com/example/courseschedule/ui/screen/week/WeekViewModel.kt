@@ -75,9 +75,8 @@ class WeekViewModel @Inject constructor(
     data class ImportConflict(
         val importedCourseName: String,
         val existingName: String,
-        val dayOfWeek: Int,
-        val startPeriod: Int,
-        val endPeriod: Int
+        val sourceRow: Int,
+        val schedule: ImportedSchedule
     )
 
     private val _selectedWeek = MutableStateFlow(0)
@@ -420,9 +419,8 @@ class WeekViewModel @Inject constructor(
                         ImportConflict(
                             importedCourseName = course.name,
                             existingName = name,
-                            dayOfWeek = s.dayOfWeek,
-                            startPeriod = s.startPeriod,
-                            endPeriod = s.endPeriod
+                            sourceRow = course.sourceRow,
+                            schedule = s
                         )
                     )
                 }
@@ -431,7 +429,7 @@ class WeekViewModel @Inject constructor(
         }
         return conflicts
             .distinct()
-            .sortedWith(compareBy<ImportConflict> { it.dayOfWeek }.thenBy { it.startPeriod })
+            .sortedWith(compareBy<ImportConflict> { it.schedule.dayOfWeek }.thenBy { it.schedule.startPeriod })
     }
 
     suspend fun checkConflict(

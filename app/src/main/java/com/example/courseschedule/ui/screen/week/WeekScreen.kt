@@ -59,7 +59,7 @@ fun WeekScreen(
     viewModel: WeekViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    var listView by remember { mutableStateOf(SettingsPrefs.isWeekListView()) }
+    val listView by SettingsPrefs.weekListView.collectAsStateWithLifecycle()
 
     // Observe NavigationState changes (set by calendar click)
     val navTargetWeek = NavigationState.targetWeek
@@ -187,15 +187,6 @@ fun WeekScreen(
                     onNextWeek = { switchToWeek(state.selectedWeek + 1) },
                     onBackToCurrent = { switchToWeek(state.currentWeek) }
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = {
-                        listView = !listView
-                        SettingsPrefs.setWeekListView(listView)
-                    }) { Text(if (listView) "切换到网格" else "切换到列表") }
-                }
 
                 Box(modifier = Modifier.weight(1f)) {
                     // 各周页共享同一竖向滚动位置；仅当前页响应竖向手势，避免同一 ScrollState 挂多个滚动容器

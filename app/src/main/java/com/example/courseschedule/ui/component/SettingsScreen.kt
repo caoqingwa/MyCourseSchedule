@@ -73,6 +73,7 @@ fun SettingsScreen(
     // 外观：手动主题模式 + 是否跟随壁纸取色
     val themeMode by SettingsPrefs.themeMode.collectAsStateWithLifecycle()
     val dynamicColor by SettingsPrefs.dynamicColor.collectAsStateWithLifecycle()
+    val weekListView by SettingsPrefs.weekListView.collectAsStateWithLifecycle()
 
     // 下载 {tag} 对应 APK：成功且已授权则直接唤起安装器，否则转入待授权
     val startDownload: (String) -> Unit = { tag ->
@@ -207,6 +208,19 @@ fun SettingsScreen(
                             checked = dynamicColor,
                             enabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S,
                             onCheckedChange = { SettingsPrefs.setDynamicColor(it) }
+                        )
+                    }
+                    Text("周课表视图", fontSize = 14.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !weekListView,
+                            onClick = { SettingsPrefs.setWeekListView(false) },
+                            label = { Text("网格") }
+                        )
+                        FilterChip(
+                            selected = weekListView,
+                            onClick = { SettingsPrefs.setWeekListView(true) },
+                            label = { Text("列表") }
                         )
                     }
                 }

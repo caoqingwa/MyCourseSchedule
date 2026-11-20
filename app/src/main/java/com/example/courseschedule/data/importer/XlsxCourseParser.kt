@@ -6,7 +6,6 @@ import java.io.BufferedInputStream
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
-import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.regex.Pattern
 
@@ -37,6 +36,9 @@ data class ParsedCourseImport(val courses: List<ImportedCourse>, val issues: Lis
  * xlsx 为 zip 包：sharedStrings.xml 存文本，sheet1.xml 引用索引。
  */
 object XlsxCourseParser {
+    private const val MAX_UNCOMPRESSED_BYTES = 16 * 1024 * 1024
+    private const val MAX_EXPANDED_CELLS = 1_000_000
+    private const val XLSX_MAX_COLUMNS = 16_384
 
     // 表头别名：标准名 -> 可能的列名
     private val HEADER_ALIASES = mapOf(
@@ -61,25 +63,33 @@ object XlsxCourseParser {
     fun parse(input: InputStream): ParsedCourseImport {
         // 单次遍历 zip：sharedStrings.xml 与第一个 worksheet 均读到内存，避免重复包装关闭底层流
         val sharedBytes = ByteArrayOutputStream()
-        var sheetBytes: ByteArray? = null
+        var sheet: ByteArrayOutputStream? = null
         ZipInputStream(BufferedInputStream(input)).use { zip ->
+            var total = 0
+            val buffer = ByteArray(8192)
             var entry = zip.nextEntry
             while (entry != null) {
-                when {
-                    entry.name == "xl/sharedStrings.xml" -> zip.copyTo(sharedBytes)
-                    entry.name.startsWith("xl/worksheets/") && entry.name.endsWith(".xml") && sheetBytes == null -> {
-                        val buf = ByteArrayOutputStream()
-                        zip.copyTo(buf)
-                        sheetBytes = buf.toByteArray()
-                    }
+                val destination = when {
+                    entry.name == "xl/sharedStrings.xml" -> sharedBytes
+                    entry.name.startsWith("xl/worksheets/") && entry.name.endsWith(".xml") && sheet == null ->
+                        ByteArrayOutputStream().also { sheet = it }
+                    else -> null
+                }
+                while (true) {
+                    val size = zip.read(buffer)
+                    if (size < 0) break
+                    total += size
+                    require(total <= MAX_UNCOMPRESSED_BYTES) { "课表文件解压后超过 16 MB" }
+                    destination?.write(buffer, 0, size)
                 }
                 zip.closeEntry()
                 entry = zip.nextEntry
             }
         }
-        val shared = parseSharedStrings(ByteArrayInputStream(sharedBytes.toByteArray()))
-        val sheet = sheetBytes ?: error("找不到课表工作表")
-        val rows = parseSheet(ByteArrayInputStream(sheet), shared)
+        val shared = if (sharedBytes.size() == 0) emptyList()
+            else parseSharedStrings(ByteArrayInputStream(sharedBytes.toByteArray()))
+        val worksheet = sheet ?: error("找不到课表工作表")
+        val rows = parseSheet(ByteArrayInputStream(worksheet.toByteArray()), shared)
         return rowsToCourses(rows)
     }
 
@@ -115,6 +125,7 @@ object XlsxCourseParser {
     private fun parseSheet(input: InputStream, shared: List<String>): List<Pair<Int, List<String>>> {
         val rows = mutableListOf<Pair<Int, List<String>>>()
         var rowNumber = 0
+        var expandedCells = 0
         val parser = newParser(input)
         var currentRow = mutableListOf<Pair<String, String>>() // 列字母 -> 值
         var inRow = false
@@ -154,7 +165,9 @@ object XlsxCourseParser {
                     "row" -> {
                         if (inRow) {
                             // 按列字母排序补齐缺失单元格
-                            rows.add(rowNumber to expandRow(currentRow))
+                            val row = expandRow(currentRow, MAX_EXPANDED_CELLS - expandedCells)
+                            expandedCells += row.size
+                            rows.add(rowNumber to row)
                             inRow = false
                         }
                     }
@@ -168,7 +181,7 @@ object XlsxCourseParser {
     }
 
     /** 把稀疏 (列字母,值) 展开为按列索引 0..max 的列表 */
-    private fun expandRow(cells: List<Pair<String, String>>): List<String> {
+    private fun expandRow(cells: List<Pair<String, String>>, remainingCells: Int): List<String> {
         if (cells.isEmpty()) return emptyList()
         val indexed = cells.mapNotNull { (ref, v) ->
             val idx = colIndex(ref)
@@ -176,6 +189,7 @@ object XlsxCourseParser {
         }
         if (indexed.isEmpty()) return emptyList()
         val maxCol = indexed.maxOf { it.first }
+        require(maxCol < remainingCells) { "工作表单元格过多" }
         val arr = MutableList(maxCol + 1) { "" }
         for ((idx, v) in indexed) {
             arr[idx] = v
@@ -187,8 +201,9 @@ object XlsxCourseParser {
         if (ref.isEmpty()) return -1
         var n = 0
         for (ch in ref) {
-            if (ch in 'A'..'Z') n = n * 26 + (ch - 'A' + 1)
-            else break
+            if (ch !in 'A'..'Z') break
+            n = n * 26 + (ch - 'A' + 1)
+            require(n <= XLSX_MAX_COLUMNS) { "工作表列号超出范围" }
         }
         return n - 1
     }

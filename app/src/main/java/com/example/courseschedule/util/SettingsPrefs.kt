@@ -29,6 +29,8 @@ object SettingsPrefs {
     val fontScale: StateFlow<Float> = _fontScale
     val themeMode: StateFlow<Int> = _themeMode
     val dynamicColor: StateFlow<Boolean> = _dynamicColor
+    private val _weekListView = MutableStateFlow(false)
+    val weekListView: StateFlow<Boolean> = _weekListView
     private val _selectedSemesterId = MutableStateFlow(0L)
     val selectedSemesterId: StateFlow<Long> = _selectedSemesterId
 
@@ -37,6 +39,7 @@ object SettingsPrefs {
         _fontScale.value = prefs.getFloat(KEY_FONT_SCALE, 1.0f).coerceIn(0.8f, 1.4f)
         _themeMode.value = prefs.getInt(KEY_THEME_MODE, THEME_SYSTEM).coerceIn(THEME_SYSTEM, THEME_DARK)
         _dynamicColor.value = prefs.getBoolean(KEY_DYNAMIC_COLOR, true)
+        _weekListView.value = prefs.getBoolean("week_list_view", false)
         _selectedSemesterId.value = prefs.getLong("selected_semester_id", 0L)
     }
 
@@ -47,9 +50,8 @@ object SettingsPrefs {
 
     fun getFontScale(): Float = _fontScale.value
 
-    fun isWeekListView(): Boolean = prefs.getBoolean("week_list_view", false)
-
     fun setWeekListView(enabled: Boolean) {
+        _weekListView.value = enabled
         prefs.edit().putBoolean("week_list_view", enabled).apply()
     }
 
