@@ -1,17 +1,29 @@
 package com.example.courseschedule.data.repository
 
+import android.content.Context
+import android.util.AtomicFile
 import androidx.room.Transaction
 import androidx.room.withTransaction
 import com.example.courseschedule.data.db.AppDatabase
 import com.example.courseschedule.data.db.ScheduleBackup
 import com.example.courseschedule.data.db.dao.*
 import com.example.courseschedule.data.db.entity.*
+import com.example.courseschedule.data.importer.XlsxCourseWriter
+import com.example.courseschedule.data.importer.CourseImportResult
+import com.example.courseschedule.data.importer.ImportUpdate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import com.example.courseschedule.util.SettingsPrefs
 import com.example.courseschedule.util.DateUtils
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.OutputStream
 import java.time.Instant
 import java.time.ZoneId
 import java.util.*
@@ -25,15 +37,63 @@ class CourseRepository @Inject constructor(
     private val courseDao: CourseDao,
     private val scheduleDao: ScheduleDao,
     private val roomDao: RoomDao,
-    private val examDao: ExamDao
+    private val examDao: ExamDao,
+    @ApplicationContext context: Context
 ) {
+    private val restoreSnapshot = AtomicFile(File(context.noBackupFilesDir, "before-restore.json"))
+    private val restoreLock = Mutex()
+
     fun getCurrentSemester(): Flow<Semester?> = combine(semesterDao.getAll(), SettingsPrefs.selectedSemesterId) { semesters, id ->
         semesters.firstOrNull { it.id == id } ?: semesters.firstOrNull()
     }.distinctUntilChanged()
-    suspend fun captureBackup(): ScheduleBackup = ScheduleBackup.capture(database)
-    suspend fun restoreBackup(backup: ScheduleBackup) {
-        backup.restore(database)
-        SettingsPrefs.selectSemester(0L)
+    suspend fun captureBackup(): ScheduleBackup =
+        ScheduleBackup.capture(database, SettingsPrefs.selectedSemesterId.value)
+
+    suspend fun exportSemester(output: OutputStream) {
+        val (courses, schedules, rooms) = database.withTransaction {
+            val semester = getCurrentSemester().first() ?: error("请先选择学期")
+            Triple(
+                courseDao.getBySemester(semester.id).first(),
+                scheduleDao.getBySemester(semester.id).first(),
+                roomDao.getAllOnce().associate { it.id to it.name }
+            )
+        }
+        XlsxCourseWriter.write(output, courses, schedules, rooms)
+    }
+
+    suspend fun hasRestoreSnapshot(): Boolean = withContext(Dispatchers.IO) {
+        restoreSnapshot.baseFile.exists()
+    }
+
+    suspend fun restoreBackup(backup: ScheduleBackup) = withContext(Dispatchers.IO) {
+        restoreLock.withLock {
+            database.withTransaction {
+                val previous = captureBackup().encode()
+                backup.restore(database)
+                val output = restoreSnapshot.startWrite()
+                try {
+                    output.write(previous)
+                    output.fd.sync()
+                    restoreSnapshot.finishWrite(output)
+                } catch (e: Exception) {
+                    restoreSnapshot.failWrite(output)
+                    throw e
+                }
+                check(restoreSnapshot.openRead().use { it.readBytes().contentEquals(previous) }) {
+                    "无法保存恢复前的快照"
+                }
+            }
+            SettingsPrefs.selectSemester(backup.selectedSemesterId)
+        }
+    }
+
+    suspend fun undoRestore() = withContext(Dispatchers.IO) {
+        restoreLock.withLock {
+            val backup = restoreSnapshot.openRead().use { ScheduleBackup.read(it, allowEmpty = true) }
+            backup.restore(database)
+            restoreSnapshot.delete()
+            SettingsPrefs.selectSemester(backup.selectedSemesterId)
+        }
     }
     fun getScheduleChanges(semesterId: Long): Flow<List<ScheduleChange>> =
         database.scheduleChangeDao().observeBySemester(semesterId)
@@ -184,16 +244,41 @@ class CourseRepository @Inject constructor(
     /** 批量导入（幂等）：学期内同名课程复用，已存在的同课程同时段跳过；每时段独立解析并复用同名教室 */
     suspend fun importCourses(
         semesterId: Long,
-        courses: List<Triple<String, String, List<Pair<Schedule, String?>>>>
-    ): Pair<Int, Int> = database.withTransaction {
-        var coursesImported = 0
+        courses: List<Triple<String, String, List<Pair<Schedule, String?>>>>,
+        updates: List<ImportUpdate>
+    ): CourseImportResult = database.withTransaction {
+        for (update in updates) {
+            when (update) {
+                is ImportUpdate.Teacher -> {
+                    val course = courseDao.getById(update.course.id)
+                    check(course != null && course.semesterId == semesterId &&
+                        course.name == update.course.name && course.teacher == update.course.teacher) {
+                        "课程已变更，请重新预览后再导入"
+                    }
+                    courseDao.update(course.copy(teacher = update.newName))
+                }
+                is ImportUpdate.Room -> {
+                    val course = courseDao.getById(update.course.id)
+                    val schedule = scheduleDao.getById(update.schedule.id)
+                    val roomName = schedule?.roomId?.let { roomDao.getById(it)?.name }.orEmpty()
+                    check(course != null && course.semesterId == semesterId && course.name == update.course.name &&
+                        schedule == update.schedule && roomName == update.oldName) {
+                        "排课或教室已变更，请重新预览后再导入"
+                    }
+                    val roomId = insertRoom(Room(name = update.newName))
+                    check(roomId > 0) { "无法保存教室" }
+                    scheduleDao.update(update.schedule.copy(roomId = roomId))
+                }
+            }
+        }
+        val importedNames = mutableSetOf<String>()
         var schedulesImported = 0
         for ((name, teacher, schedules) in courses) {
             val added = importCourseWithSchedules(semesterId, name, teacher, schedules)
-            if (added > 0) coursesImported++
+            if (added > 0) importedNames.add(name)
             schedulesImported += added
         }
-        coursesImported to schedulesImported
+        CourseImportResult(importedNames.size, schedulesImported, updates.size)
     }
 
     private suspend fun importCourseWithSchedules(

@@ -9,16 +9,27 @@ import java.io.InputStream
 import java.time.LocalDate
 import java.time.LocalTime
 
-class ScheduleBackup private constructor(private val tables: JSONObject) {
+class ScheduleBackup private constructor(
+    private val tables: JSONObject,
+    val createdAt: Long?,
+    val selectedSemesterId: Long
+) {
     val semesterNames: List<String>
         get() = tables.getJSONArray("semesters").let { rows ->
             (0 until rows.length()).map { rows.getJSONArray(it).getString(1) }
         }
     val courseCount: Int get() = tables.getJSONArray("courses").length()
+    val scheduleCount: Int get() = tables.getJSONArray("schedules").length()
     val examCount: Int get() = tables.getJSONArray("exams").length()
     val changeCount: Int get() = tables.getJSONArray("schedule_changes").length()
 
-    fun encode(): String = JSONObject().put("format", 1).put("tables", tables).toString()
+    fun encode(): ByteArray = JSONObject()
+        .put("format", 1)
+        .put("tables", tables)
+        .put("createdAt", createdAt)
+        .put("selectedSemesterId", selectedSemesterId)
+        .toString().toByteArray(Charsets.UTF_8)
+        .also { require(it.size <= MAX_BYTES) { "备份文件超过 8 MB" } }
 
     suspend fun restore(database: AppDatabase) = database.withTransaction {
         val sqlite = database.openHelper.writableDatabase
@@ -58,7 +69,7 @@ class ScheduleBackup private constructor(private val tables: JSONObject) {
         private val textFields = setOf("name", "periodTimesJson", "building", "teacher", "color", "notes", "roomName")
         private val nullableFields = setOf("building", "roomId", "notes", "targetDay", "roomName")
 
-        fun read(input: InputStream): ScheduleBackup {
+        fun read(input: InputStream, allowEmpty: Boolean = false): ScheduleBackup {
             val bytes = input.readNBytesCompat()
             val root = JSONObject(bytes.toString(Charsets.UTF_8))
             require(root.getInt("format") == 1) { "不支持此备份格式" }
@@ -81,8 +92,12 @@ class ScheduleBackup private constructor(private val tables: JSONObject) {
                     validateRow(table, row)
                 }
             }
-            require(tables.getJSONArray("semesters").length() > 0) { "备份中没有学期" }
-            return ScheduleBackup(tables)
+            require(allowEmpty || tables.getJSONArray("semesters").length() > 0) { "备份中没有学期" }
+            return ScheduleBackup(
+                tables,
+                root.optLong("createdAt").takeIf { it > 0 },
+                root.optLong("selectedSemesterId")
+            )
         }
 
         private fun validateRow(table: String, row: JSONArray) {
@@ -127,7 +142,7 @@ class ScheduleBackup private constructor(private val tables: JSONObject) {
             return output.toByteArray()
         }
 
-        suspend fun capture(database: AppDatabase): ScheduleBackup = database.withTransaction {
+        suspend fun capture(database: AppDatabase, selectedSemesterId: Long): ScheduleBackup = database.withTransaction {
             val tables = JSONObject()
             for ((table, fields) in columns) {
                 val rows = JSONArray()
@@ -146,7 +161,7 @@ class ScheduleBackup private constructor(private val tables: JSONObject) {
                 }
                 tables.put(table, rows)
             }
-            ScheduleBackup(tables)
+            ScheduleBackup(tables, System.currentTimeMillis(), selectedSemesterId)
         }
     }
 }

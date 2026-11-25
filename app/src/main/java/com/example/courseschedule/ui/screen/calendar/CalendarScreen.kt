@@ -40,7 +40,6 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import com.example.courseschedule.data.db.entity.Exam
 import com.example.courseschedule.ui.component.AddExamDialog
 import com.example.courseschedule.ui.component.CalendarPicker
-import com.example.courseschedule.util.DateUtils
 import com.example.courseschedule.util.NotificationHelper
 import com.example.courseschedule.util.scheduleOccurrences
 import java.time.Instant
@@ -48,6 +47,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlinx.coroutines.launch
@@ -55,7 +55,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CalendarScreen(
-    onDayClick: (dayMillis: Long, weekNumber: Int) -> Unit,
+    onOpenWeek: (weekNumber: Int, dayOfWeek: Int) -> Unit,
     onOpenSettings: () -> Unit = {},
     pendingExamId: Long? = null,
     onPendingExamOpened: () -> Unit = {},
@@ -147,7 +147,7 @@ fun CalendarScreen(
     // 考试列表按课程 id 取名称：建一次 map，避免每个 item 里 O(课程数) 的 find
     val courseMap = remember(state.courses) { state.courses.associateBy { it.id } }
     val summaryDate = selectedDateMillis?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
-        ?: Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+        ?: summaryToday
     val summaryCourses = remember(summaryDate, state.semester, state.schedules, state.scheduleChanges, zone) {
         state.semester?.let { semester ->
             val start = Instant.ofEpochMilli(semester.startDate).atZone(zone).toLocalDate()
@@ -371,14 +371,11 @@ fun CalendarScreen(
                             currentMonth = displayMonth,
                             currentYear = displayYear,
                             todayMillis = summaryToday.atStartOfDay(zone).toInstant().toEpochMilli(),
+                            selectedDate = summaryDate,
                             semesterStartMillis = sem.startDate,
                             totalWeeks = sem.totalWeeks,
                             changedDays = changedDays,
-                            onDayClick = { dayMillis ->
-                                selectedDateMillis = dayMillis
-                                val weekNum = DateUtils.getWeekNumber(dayMillis, sem.startDate)
-                                onDayClick(dayMillis, weekNum)
-                            },
+                            onDayClick = { selectedDateMillis = it },
                             onMonthChange = { month, year ->
                                 displayMonth = month
                                 displayYear = year
@@ -400,7 +397,24 @@ fun CalendarScreen(
                         Modifier.fillMaxWidth().padding(vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text("${summaryDate.monthValue}月${summaryDate.dayOfMonth}日安排", style = MaterialTheme.typography.titleSmall)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "${summaryDate.monthValue}月${summaryDate.dayOfMonth}日安排",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            if (firstDay != null && lastDay != null && summaryDate in firstDay..lastDay) {
+                                TextButton(onClick = {
+                                    val week = ChronoUnit.WEEKS.between(firstDay, summaryDate).toInt() + 1
+                                    onOpenWeek(week, summaryDate.dayOfWeek.value)
+                                }) {
+                                    Text("查看周课表")
+                                }
+                            }
+                        }
                         if (summaryCourses.isEmpty() && summaryExams.isEmpty() && summaryChanges.isEmpty()) {
                             Text("当天没有安排", style = MaterialTheme.typography.bodySmall)
                         }

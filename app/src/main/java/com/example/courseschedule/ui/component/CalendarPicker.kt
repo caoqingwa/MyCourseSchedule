@@ -7,6 +7,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.stateDescription
 import java.time.LocalDate
 import java.time.Instant
@@ -43,6 +45,7 @@ fun CalendarPicker(
     currentMonth: Int,
     currentYear: Int,
     todayMillis: Long,
+    selectedDate: LocalDate,
     semesterStartMillis: Long,
     totalWeeks: Int,
     onDayClick: (Long) -> Unit,
@@ -183,7 +186,15 @@ fun CalendarPicker(
                 },
                 label = "monthFade"
             ) {
-                MonthGrid(currentYear, currentMonth, todayMillis, onDayClick, onDayLongPress, changedDays)
+                MonthGrid(
+                    year = it / 100,
+                    month = it % 100,
+                    todayMillis = todayMillis,
+                    selectedDate = selectedDate,
+                    onDayClick = onDayClick,
+                    onDayLongPress = onDayLongPress,
+                    changedDays = changedDays
+                )
             }
         }
 
@@ -219,6 +230,7 @@ private fun MonthGrid(
     year: Int,
     month: Int,
     todayMillis: Long,
+    selectedDate: LocalDate,
     onDayClick: (Long) -> Unit,
     onDayLongPress: ((Long) -> Unit)?,
     changedDays: Set<Long>
@@ -281,10 +293,13 @@ private fun MonthGrid(
                             inWeek -> MaterialTheme.colorScheme.onPrimaryContainer
                             else -> MaterialTheme.colorScheme.onSurface
                         }
-                        val changed = LocalDate.of(year, month + 1, d).toEpochDay() in changedDays
-                        val cellModifier = Modifier.weight(1f).height(cellHeight).then(
-                            if (changed) Modifier.semantics { stateDescription = "有课程调整" } else Modifier
-                        )
+                        val date = LocalDate.of(year, month + 1, d)
+                        val isSelected = date == selectedDate
+                        val changed = date.toEpochDay() in changedDays
+                        val cellModifier = Modifier.weight(1f).height(cellHeight).semantics {
+                            selected = isSelected
+                            if (changed) stateDescription = "有课程调整"
+                        }
                         Box(
                             modifier = if (onDayLongPress != null) {
                                 cellModifier.combinedClickable(
@@ -304,12 +319,14 @@ private fun MonthGrid(
                                         .background(MaterialTheme.colorScheme.primaryContainer)
                                 )
                             }
-                            // 今天：实心圆角方块覆盖在周条之上；高度与周条等高，垂直齐平
-                            if (isToday) {
+                            if (isToday || isSelected) {
+                                val dayShape = RoundedCornerShape(weekCorner)
+                                val primary = MaterialTheme.colorScheme.primary
                                 Box(
-                                    modifier = Modifier.size(cellHeight)
-                                        .clip(RoundedCornerShape(weekCorner))
-                                        .background(MaterialTheme.colorScheme.primary),
+                                    modifier = Modifier.size(cellHeight).then(
+                                        if (isToday) Modifier.background(primary, dayShape)
+                                        else Modifier.border(1.dp, primary, dayShape)
+                                    ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(d.toString(), fontSize = 12.sp, color = fg)

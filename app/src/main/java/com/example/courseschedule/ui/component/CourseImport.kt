@@ -2,266 +2,230 @@ package com.example.courseschedule.ui.component
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.courseschedule.data.importer.CourseImportResult
 import com.example.courseschedule.data.importer.ImportedCourse
-import com.example.courseschedule.data.importer.ImportRowIssue
+import com.example.courseschedule.data.importer.ImportUpdate
+import com.example.courseschedule.data.importer.ImportWorksheet
 import com.example.courseschedule.data.importer.ParsedCourseImport
 import com.example.courseschedule.data.importer.XlsxCourseParser
-import com.example.courseschedule.ui.screen.week.WeekViewModel.ImportConflict
+import com.example.courseschedule.data.importer.XlsxCourseWriter
 import com.example.courseschedule.ui.screen.week.WeekViewModel.ImportPreview
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * xlsx 课表导入的完整流程（选择文件 → 确认 → 结果/错误）。
- *
- * 之前这套逻辑藏在周课表页顶栏齿轮打开的学期设置弹窗里，入口极深；
- * 现在提到 MainActivity，全局设置里的学期设置也能直接导入。
- *
- * @param requestKey 每次自增表示「请打开文件选择器」，处理完回调 [onRequestHandled] 复位
- */
 @Composable
 fun CourseImportFlow(
     requestKey: Int,
     onRequestHandled: () -> Unit,
     previewImport: suspend (ParsedCourseImport) -> ImportPreview,
-    importCourses: suspend (Long, List<ImportedCourse>) -> Pair<Int, Int>,
+    importCourses: suspend (Long, List<ImportedCourse>, List<ImportUpdate>) -> CourseImportResult,
 ) {
-    var importResult by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    var importError by remember { mutableStateOf<String?>(null) }
-    var showImportConfirm by remember { mutableStateOf(false) }
-    var parsing by remember { mutableStateOf(false) }
-    var saving by remember { mutableStateOf(false) }
-    var rowIssues by remember { mutableStateOf<List<ImportRowIssue>>(emptyList()) }
-    var duplicateCount by remember { mutableIntStateOf(0) }
-    var semesterName by remember { mutableStateOf("") }
-    var semesterId by remember { mutableStateOf(0L) }
-    var showRowIssues by remember { mutableStateOf(false) }
-    var parsedCourses by remember { mutableStateOf<List<ImportedCourse>>(emptyList()) }
-    var importConflicts by remember { mutableStateOf<List<ImportConflict>>(emptyList()) }
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
+    val resolver = LocalContext.current.contentResolver
+    var progress by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var result by remember { mutableStateOf<CourseImportResult?>(null) }
+    var worksheets by remember { mutableStateOf(emptyList<ImportWorksheet>()) }
+    var preview by remember { mutableStateOf<ImportPreview?>(null) }
 
-    fun save(courses: List<ImportedCourse>) {
-        if (saving || courses.isEmpty()) return
-        val targetSemester = semesterId
-        saving = true
-        showImportConfirm = false
+    fun perform(label: String, action: suspend () -> Unit) {
+        if (progress != null) return
+        progress = label
         scope.launch {
             try {
-                importResult = importCourses(targetSemester, courses)
+                action()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                importError = e.message ?: "无法保存课表"
+                error = e.message ?: "无法导入课表"
             } finally {
-                saving = false
+                progress = null
             }
         }
     }
 
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) {
-            parsing = true
-            scope.launch {
-                try {
-                    val parsed = withContext(Dispatchers.IO) {
-                        context.contentResolver.openInputStream(uri)?.use(XlsxCourseParser::parse)
-                            ?: error("无法读取课表文件")
-                    }
-                    val courses = parsed.courses
-                    if (courses.isEmpty() && parsed.issues.isEmpty()) {
-                        importError =
-                            "\u672a\u89e3\u6790\u51fa\u6709\u6548\u8bfe\u7a0b\uff08\u8bf7\u786e\u8ba4\u8868\u683c\u5305\u542b\u201c\u8bfe\u7a0b\u540d\u79f0\u201d\u4e0e\u201c\u4e0a\u8bfe\u65f6\u95f4\u201d\u5217\uff09"
-                    } else {
-                        val preview = previewImport(parsed)
-                        parsedCourses = preview.courses
-                        rowIssues = preview.issues
-                        showRowIssues = preview.courses.isEmpty()
-                        importConflicts = preview.conflicts
-                        duplicateCount = preview.duplicates
-                        semesterName = preview.semesterName
-                        semesterId = preview.semesterId
-                        showImportConfirm = true
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    importError = "\u5bfc\u5165\u5931\u8d25\uff1a${e.message}"
-                } finally {
-                    parsing = false
-                }
+    suspend fun prepare(sheet: ImportWorksheet) {
+        require(sheet.data.courses.isNotEmpty() || sheet.data.issues.isNotEmpty()) {
+            "「${sheet.name}」没有课程。请填写模板后重新导入。"
+        }
+        preview = withContext(Dispatchers.Default) { previewImport(sheet.data) }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) perform("正在读取课表") {
+            val sheets = withContext(Dispatchers.IO) {
+                resolver.openInputStream(uri)?.use(XlsxCourseParser::parse)
+                    ?: error("无法读取课表文件")
             }
+            if (sheets.size == 1) prepare(sheets.single()) else worksheets = sheets
         }
     }
 
     LaunchedEffect(requestKey) {
         if (requestKey > 0) {
             onRequestHandled()
-            importLauncher.launch(
-                arrayOf(
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    "application/octet-stream",
-                    "*/*"
-                )
-            )
+            importLauncher.launch(arrayOf(XlsxCourseWriter.MIME_TYPE, "application/octet-stream", "*/*"))
         }
     }
 
-    if (parsing || saving) {
+    progress?.let { label ->
         AlertDialog(
             onDismissRequest = {},
-            title = { Text(if (saving) "正在保存课表" else "正在读取课表") },
+            title = { Text(label) },
             text = { CircularProgressIndicator() },
             confirmButton = {}
         )
     }
 
-    // 导入结果确认
-    if (showImportConfirm) {
-        val conflictedSlots = remember(importConflicts) {
-            importConflicts.map { it.sourceRow to it.schedule }.toSet()
-        }
-        val conflictCount = conflictedSlots.size
-        var showConflicts by remember { mutableStateOf(false) }
+    if (worksheets.isNotEmpty()) {
         AlertDialog(
-            onDismissRequest = { showImportConfirm = false },
-            title = { Text("\u5bfc\u5165\u8bfe\u7a0b\u786e\u8ba4") },
+            onDismissRequest = { worksheets = emptyList() },
+            title = { Text("选择课表工作表") },
             text = {
-                Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
-                    Text(
-                        "${semesterName} · 可新增 ${parsedCourses.sumOf { it.schedules.size }} 个时段",
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (duplicateCount > 0) Text("重复时段将跳过（$duplicateCount）")
-                    parsedCourses.take(8).forEach {
-                        Text("\u2022 ${it.name}", fontSize = 13.sp, maxLines = 1)
-                    }
-                    if (parsedCourses.size > 8) {
-                        Text(
-                            "...\u7b49${parsedCourses.size}\u95e8",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    if (rowIssues.isNotEmpty()) {
-                        TextButton(onClick = { showRowIssues = !showRowIssues }) {
-                            val action = if (showRowIssues) "收起" else "查看"
-                            Text("${action}跳过项（${rowIssues.size}）")
+                LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                    items(worksheets) { sheet ->
+                        TextButton(onClick = {
+                            worksheets = emptyList()
+                            perform("正在准备导入预览") { prepare(sheet) }
+                        }) {
+                            Text("${sheet.name} · ${sheet.data.courses.size} 条课程记录")
                         }
-                        if (showRowIssues) {
-                            rowIssues.forEach { issue ->
-                                Text("第 ${issue.row} 行 · ${issue.reason}")
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { worksheets = emptyList() }) { Text("取消") } }
+        )
+    }
+
+    preview?.let { plan ->
+        var applyUpdates by remember(plan) { mutableStateOf(false) }
+        var showUpdates by remember(plan) { mutableStateOf(plan.courses.isEmpty()) }
+        var showIssues by remember(plan) { mutableStateOf(plan.courses.isEmpty()) }
+        var showConflicts by remember(plan) { mutableStateOf(false) }
+        val conflictCount = plan.conflictedSlots.size
+
+        fun save(skipConflicts: Boolean) {
+            val updates = if (applyUpdates) plan.updates else emptyList()
+            preview = null
+            perform("正在保存课表") {
+                val courses = if (skipConflicts) withContext(Dispatchers.Default) {
+                    plan.courses.mapNotNull { course ->
+                        val schedules = course.schedules.filterNot { (course.sourceRow to it) in plan.conflictedSlots }
+                        if (schedules.isEmpty()) null else course.copy(schedules = schedules)
+                    }
+                } else plan.courses
+                result = importCourses(plan.semesterId, courses, updates)
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { preview = null },
+            title = { Text("导入课程确认") },
+            text = {
+                LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                    item {
+                        Text("${plan.semesterName} · 可新增 ${plan.scheduleCount} 个时段")
+                        if (plan.duplicates > 0) Text("重复时段将跳过（${plan.duplicates}）")
+                    }
+                    items(plan.courses.take(8)) { Text("• ${it.name}", maxLines = 1) }
+                    if (plan.courses.size > 8) item { Text("共 ${plan.courses.size} 条课程记录") }
+                    if (plan.updates.isNotEmpty()) {
+                        item {
+                            TextButton(onClick = { showUpdates = !showUpdates }) {
+                                Text(if (showUpdates) "收起已有排课变更" else "查看已有排课变更（${plan.updates.size}）")
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth().toggleable(
+                                    value = applyUpdates, role = Role.Checkbox, onValueChange = { applyUpdates = it }
+                                ),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(checked = applyUpdates, onCheckedChange = null)
+                                Text("应用 ${plan.updates.size} 项教师或教室变更")
                             }
                         }
+                        if (showUpdates) items(plan.updates) { Text(it.description) }
+                    }
+                    if (plan.issues.isNotEmpty()) {
+                        item {
+                            TextButton(onClick = { showIssues = !showIssues }) {
+                                Text(if (showIssues) "收起跳过项" else "查看跳过项（${plan.issues.size}）")
+                            }
+                        }
+                        if (showIssues) items(plan.issues) { Text("第 ${it.row} 行 · ${it.reason}") }
                     }
                     if (conflictCount > 0) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "$conflictCount 个排课时段存在冲突",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        val dayNames = listOf(
-                            "\u5468\u4e00", "\u5468\u4e8c", "\u5468\u4e09", "\u5468\u56db",
-                            "\u5468\u4e94", "\u5468\u516d", "\u5468\u65e5"
-                        )
-                        TextButton(onClick = { showConflicts = !showConflicts }) {
-                            Text(if (showConflicts) "收起冲突明细" else "查看冲突明细")
-                        }
-                        if (showConflicts) {
-                            importConflicts.forEach {
-                                val schedule = it.schedule
-                                val day = dayNames.getOrElse(schedule.dayOfWeek - 1) { "?" }
-                                Text(
-                                    "第 ${it.sourceRow} 行 · ${it.importedCourseName} 与 ${it.existingName}（$day 第 ${schedule.startPeriod}–${schedule.endPeriod} 节）",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                        item {
+                            Text("$conflictCount 个排课时段存在冲突", color = MaterialTheme.colorScheme.error)
+                            TextButton(onClick = { showConflicts = !showConflicts }) {
+                                Text(if (showConflicts) "收起冲突明细" else "查看冲突明细")
                             }
+                        }
+                        if (showConflicts) items(plan.conflicts) {
+                            val slot = it.schedule
+                            val day = "一二三四五六日"[slot.dayOfWeek - 1]
+                            Text(
+                                "第 ${it.sourceRow} 行 · ${it.importedCourseName} 与 ${it.existingName}" +
+                                    "（周$day 第 ${slot.startPeriod}–${slot.endPeriod} 节）",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(enabled = parsedCourses.isNotEmpty(), onClick = {
-                    save(parsedCourses)
-                }) { Text("\u5168\u90e8\u5bfc\u5165") }
+                TextButton(enabled = plan.scheduleCount > 0 || applyUpdates, onClick = { save(false) }) {
+                    Text(if (conflictCount > 0) "全部导入" else if (plan.scheduleCount > 0) "导入" else "更新")
+                }
             },
             dismissButton = {
                 Row {
                     if (conflictCount > 0) {
-                        val remaining = parsedCourses.mapNotNull { course ->
-                            val schedules = course.schedules.filterNot { (course.sourceRow to it) in conflictedSlots }
-                            if (schedules.isEmpty()) null else course.copy(schedules = schedules)
-                        }
-                        TextButton(enabled = remaining.isNotEmpty(), onClick = {
-                            save(remaining)
-                        }) {
-                            Text(
-                                "\u8df3\u8fc7\u51b2\u7a81\u5bfc\u5165",
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                        TextButton(
+                            enabled = plan.scheduleCount > conflictCount || applyUpdates,
+                            onClick = { save(true) }
+                        ) { Text("跳过冲突导入") }
                     }
-                    TextButton(onClick = {
-                        showImportConfirm = false
-                        parsedCourses = emptyList()
-                        importConflicts = emptyList()
-                    }) { Text("\u53d6\u6d88") }
+                    TextButton(onClick = { preview = null }) { Text("取消") }
                 }
             }
         )
     }
 
-    importResult?.let { (courses, schedules) ->
+    result?.let {
         AlertDialog(
-            onDismissRequest = { importResult = null },
-            title = { Text("\u5bfc\u5165\u5b8c\u6210") },
-            text = { Text("\u6210\u529f\u5bfc\u5165 ${courses} \u95e8\u8bfe\u7a0b\u3001${schedules} \u4e2a\u6392\u8bfe\u65f6\u6bb5\u3002") },
-            confirmButton = {
-                TextButton(onClick = { importResult = null }) { Text("\u597d") }
-            }
+            onDismissRequest = { result = null },
+            title = { Text("导入完成") },
+            text = { Text("导入 ${it.courseCount} 门课程的 ${it.scheduleCount} 个时段，更新 ${it.updateCount} 项已有信息。") },
+            confirmButton = { TextButton(onClick = { result = null }) { Text("确定") } }
         )
     }
-
-    importError?.let { msg ->
+    error?.let {
         AlertDialog(
-            onDismissRequest = { importError = null },
-            title = { Text("\u5bfc\u5165\u5931\u8d25") },
-            text = { Text(msg) },
-            confirmButton = {
-                TextButton(onClick = { importError = null }) { Text("\u597d") }
-            }
+            onDismissRequest = { error = null },
+            title = { Text("导入失败") },
+            text = { Text(it) },
+            confirmButton = { TextButton(onClick = { error = null }) { Text("确定") } }
         )
     }
 }

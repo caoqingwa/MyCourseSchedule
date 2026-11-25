@@ -12,6 +12,8 @@ import com.example.courseschedule.data.db.ScheduleBackup
 import com.example.courseschedule.util.SettingsPrefs
 import com.example.courseschedule.data.db.entity.Semester
 import com.example.courseschedule.data.importer.ImportedCourse
+import com.example.courseschedule.data.importer.CourseImportResult
+import com.example.courseschedule.data.importer.ImportUpdate
 import com.example.courseschedule.data.importer.ImportedSchedule
 import com.example.courseschedule.data.importer.ImportRowIssue
 import com.example.courseschedule.data.importer.ParsedCourseImport
@@ -25,8 +27,11 @@ import com.example.courseschedule.worker.ExamReminderWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.OutputStream
 import java.time.Instant
 import java.time.LocalDate
 import com.example.courseschedule.util.scheduleOccurrences
@@ -208,9 +213,20 @@ class WeekViewModel @Inject constructor(
     }
 
     suspend fun captureBackup(): ScheduleBackup = repository.captureBackup()
+    suspend fun exportSemester(output: OutputStream) = repository.exportSemester(output)
+    suspend fun hasRestoreSnapshot(): Boolean = repository.hasRestoreSnapshot()
 
-    suspend fun restoreBackup(backup: ScheduleBackup) {
+    suspend fun restoreBackup(backup: ScheduleBackup) = withContext(NonCancellable) {
         repository.restoreBackup(backup)
+        refreshAfterRestore()
+    }
+
+    suspend fun undoRestore() = withContext(NonCancellable) {
+        repository.undoRestore()
+        refreshAfterRestore()
+    }
+
+    private suspend fun refreshAfterRestore() {
         _selectedWeek.value = 0
         _highlightDayOfWeek.value = 0
         ExamReminderWorker.rescheduleAll(
@@ -318,8 +334,9 @@ class WeekViewModel @Inject constructor(
         }
     }
 
-    /** 从 xlsx 解析出的课程批量导入当前学期，返回 (导入课程数, 导入时段数) */
-    suspend fun importParsedCourses(semesterId: Long, courses: List<ImportedCourse>): Pair<Int, Int> {
+    suspend fun importParsedCourses(
+        semesterId: Long, courses: List<ImportedCourse>, updates: List<ImportUpdate>
+    ): CourseImportResult {
         val semester = repository.getSemesterById(semesterId) ?: error("目标学期已删除，请重新选择课表")
         val validCourses = courses.mapNotNull { course ->
             // 丢弃越界/颠倒的时段（day 1..7、节次 1..periodCount、周次 1..totalWeeks），避免脏数据入库
@@ -338,50 +355,104 @@ class WeekViewModel @Inject constructor(
                 }
             if (schedPairs.isEmpty()) null else Triple(course.name, course.teacher, schedPairs)
         }
-        return repository.importCourses(semester.id, validCourses)
+        return repository.importCourses(semester.id, validCourses, updates)
     }
 
     data class ImportPreview(
         val courses: List<ImportedCourse>,
         val issues: List<ImportRowIssue>,
         val duplicates: Int,
+        val updates: List<ImportUpdate>,
         val conflicts: List<ImportConflict>,
         val semesterId: Long,
         val semesterName: String
-    )
+    ) {
+        val scheduleCount = courses.sumOf { it.schedules.size }
+        val conflictedSlots = conflicts.map { it.sourceRow to it.schedule }.toSet()
+    }
 
     suspend fun previewImport(parsed: ParsedCourseImport): ImportPreview {
         val semester = repository.getCurrentSemester().first() ?: error("请先设置当前学期")
         val existing = repository.getSchedulesBySemester(semester.id).first()
-        val names = repository.getCoursesBySemester(semester.id).first().associate { it.id to it.name }
-        val seen = existing.mapNotNullTo(mutableSetOf()) { schedule ->
-            val name = names[schedule.courseId] ?: return@mapNotNullTo null
-            name to ImportedSchedule(
+        val currentCourses = repository.getCoursesBySemester(semester.id).first().associateBy { it.id }
+        val byName = currentCourses.values.groupBy { it.name }
+        val rooms = repository.getAllRoomsOnce().associate { it.id to it.name }
+        val bySlot = existing.groupBy { schedule ->
+            currentCourses[schedule.courseId]?.name to ImportedSchedule(
                 schedule.dayOfWeek, schedule.startPeriod, schedule.endPeriod,
                 schedule.startWeek, schedule.endWeek, schedule.weekType, ""
             )
         }
         val issues = parsed.issues.toMutableList()
+        val pendingRooms = mutableListOf<ImportUpdate.Room>()
+        val pendingTeachers = mutableMapOf<Course, MutableList<Pair<Int, String>>>()
+        val seen = mutableMapOf<Pair<String, ImportedSchedule>, String>()
         var duplicates = 0
         val courses = parsed.courses.mapNotNull { course ->
+            val matches = byName[course.name].orEmpty()
+            val currentCourse = matches.singleOrNull()
+            val teacherDiffers = currentCourse != null && course.teacher.isNotBlank() &&
+                currentCourse.teacher != course.teacher
+            var validSlot = false
             val valid = course.schedules.filter { schedule ->
-                when {
-                    !isWithinSemester(schedule, semester) -> {
-                        issues.add(ImportRowIssue(course.sourceRow, "排课节次或周次超出学期范围"))
-                        false
-                    }
-                    !seen.add(course.name to schedule.copy(roomName = "")) -> {
-                        duplicates++
-                        false
-                    }
-                    else -> true
+                if (!isWithinSemester(schedule, semester)) {
+                    issues.add(ImportRowIssue(course.sourceRow, "排课节次或周次超出学期范围"))
+                    return@filter false
                 }
+                validSlot = true
+                val slot = course.name to schedule.copy(roomName = "")
+                val stored = bySlot[slot].orEmpty()
+                if (stored.isNotEmpty()) {
+                    val target = stored.singleOrNull()
+                    val oldRoom = target?.roomId?.let { rooms[it] }.orEmpty()
+                    if (schedule.roomName.isNotBlank()) {
+                        if (target != null && currentCourse != null) {
+                            pendingRooms.add(ImportUpdate.Room(
+                                currentCourse, target, oldRoom, schedule.roomName, course.sourceRow
+                            ))
+                        } else if (schedule.roomName != oldRoom) {
+                            issues.add(ImportRowIssue(course.sourceRow, "同名时段匹配到多条排课，已保留原教室"))
+                        }
+                    }
+                    if (!teacherDiffers && (schedule.roomName.isBlank() || schedule.roomName == oldRoom)) {
+                        duplicates++
+                    }
+                    return@filter false
+                }
+                val otherRoom = seen.putIfAbsent(slot, schedule.roomName)
+                if (otherRoom == null) return@filter true
+                if (schedule.roomName.isNotBlank() && schedule.roomName != otherRoom) {
+                    issues.add(ImportRowIssue(course.sourceRow, "文件内相同时段的教室不同，已保留首条"))
+                } else duplicates++
+                false
+            }
+            if (validSlot && course.teacher.isNotBlank() && currentCourse != null) {
+                pendingTeachers.getOrPut(currentCourse) { mutableListOf() }
+                    .add(course.sourceRow to course.teacher)
             }
             if (valid.isEmpty()) null else course.copy(schedules = valid)
         }
+        val updates = mutableListOf<ImportUpdate>()
+        for ((course, candidates) in pendingTeachers) {
+            val names = candidates.map { it.second }.distinct()
+            if (names.size == 1 && names.first() != course.teacher) {
+                updates.add(ImportUpdate.Teacher(course, names.first()))
+            } else if (names.size > 1) {
+                issues.add(ImportRowIssue(candidates.first().first, "${course.name} 的教师填写不一致，已保留原教师"))
+            }
+        }
+        for (candidates in pendingRooms.groupBy { it.schedule.id }.values) {
+            val first = candidates.first()
+            if (candidates.any { it.newName != first.newName }) {
+                issues.add(ImportRowIssue(first.sourceRow, "${first.course.name} 的教室填写不一致，已保留原教室"))
+            } else if (first.newName != first.oldName) {
+                updates.add(first)
+            }
+        }
         return ImportPreview(
-            courses, issues.sortedBy { it.row }, duplicates,
-            checkImportConflicts(courses, existing, names), semester.id, semester.name
+            courses, issues.sortedBy { it.row }, duplicates, updates,
+            checkImportConflicts(courses, existing, currentCourses.mapValues { it.value.name }),
+            semester.id, semester.name
         )
     }
 

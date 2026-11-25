@@ -14,8 +14,9 @@ android {
         applicationId = "com.example.courseschedule"
         minSdk = 26
         targetSdk = 35
-        versionCode = 32
-        versionName = "2.4.1"
+        versionCode = 33
+        versionName = "2.4.2"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -92,4 +93,6 @@ dependencies {
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 
     testImplementation("junit:junit:4.13.2")
+    testRuntimeOnly("net.sf.kxml:kxml2:2.3.0")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

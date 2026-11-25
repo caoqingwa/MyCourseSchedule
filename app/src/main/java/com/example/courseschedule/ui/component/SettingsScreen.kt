@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.example.courseschedule.util.AppUpdater
 import com.example.courseschedule.data.db.ScheduleBackup
+import java.io.OutputStream
 import com.example.courseschedule.util.SettingsPrefs
 import com.example.courseschedule.util.VersionChecker
 import java.io.File
@@ -59,6 +60,10 @@ fun SettingsScreen(
     onOpenSemesterSetup: () -> Unit,
     captureBackup: suspend () -> ScheduleBackup,
     restoreBackup: suspend (ScheduleBackup) -> Unit,
+    hasRestoreSnapshot: suspend () -> Boolean,
+    undoRestore: suspend () -> Unit,
+    exportSemester: suspend (OutputStream) -> Unit,
+    onImport: () -> Unit,
     onClearAll: () -> Unit
 ) {
     val outerDensity = LocalDensity.current
@@ -244,7 +249,7 @@ fun SettingsScreen(
                 }
             }
 
-            BackupSettings(captureBackup, restoreBackup)
+            BackupSettings(captureBackup, restoreBackup, hasRestoreSnapshot, undoRestore, exportSemester, onImport)
 
             // ── 检查更新 + 版本号 ──
             Card(

@@ -41,7 +41,6 @@ import com.example.courseschedule.ui.screen.week.WeekScreen
 import com.example.courseschedule.ui.screen.week.WeekViewModel
 import com.example.courseschedule.ui.screen.calendar.CalendarScreen
 import com.example.courseschedule.ui.theme.CourseScheduleTheme
-import com.example.courseschedule.util.DateUtils
 import com.example.courseschedule.util.NotificationHelper
 import com.example.courseschedule.util.SettingsPrefs
 import dagger.hilt.android.AndroidEntryPoint
@@ -208,9 +207,9 @@ fun MainApp(notificationExamId: Long? = null, onNotificationOpened: () -> Unit =
                 2 -> CalendarScreen(
                     pendingExamId = pendingExamId,
                     onPendingExamOpened = { pendingExamId = null },
-                    onDayClick = { dayMillis, weekNumber ->
+                    onOpenWeek = { weekNumber, dayOfWeek ->
                         NavigationState.targetWeek = weekNumber
-                        NavigationState.targetDayOfWeek = DateUtils.getDayOfWeek(dayMillis)
+                        NavigationState.targetDayOfWeek = dayOfWeek
                         navigateTo(1)
                     },
                     onOpenSettings = { showSettings = true }
@@ -335,6 +334,10 @@ fun MainApp(notificationExamId: Long? = null, onNotificationOpened: () -> Unit =
             versionName = BuildConfig.VERSION_NAME,
             captureBackup = weekViewModel::captureBackup,
             restoreBackup = weekViewModel::restoreBackup,
+            hasRestoreSnapshot = weekViewModel::hasRestoreSnapshot,
+            undoRestore = weekViewModel::undoRestore,
+            exportSemester = weekViewModel::exportSemester,
+            onImport = { importRequest++ },
             onBack = { showSettings = false },
             onOpenSemesterSetup = {
                 creatingSemester = false
@@ -380,7 +383,7 @@ fun MainApp(notificationExamId: Long? = null, onNotificationOpened: () -> Unit =
         requestKey = importRequest,
         onRequestHandled = { importRequest = 0 },
         previewImport = { weekViewModel.previewImport(it) },
-        importCourses = { semesterId, courses -> weekViewModel.importParsedCourses(semesterId, courses) }
+        importCourses = weekViewModel::importParsedCourses
     )
     }
 }
